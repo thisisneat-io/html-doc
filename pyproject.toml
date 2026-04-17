@@ -3,7 +3,7 @@ requires = ["setuptools", "setuptools-scm"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "neat-html-doc"
+name = "html-doc"
 version = "0.1.0"
 description = "Neat plugin for generating HTML documentation from data model definitions."
 authors = [
