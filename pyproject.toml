@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "neat-html-doc"
+version = "0.1.0"
+description = "Neat plugin for generating HTML documentation from data model definitions."
+authors = [
+    {name = "Per Olav Opdahl"},
+]
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["cognite-neat>=1.0.59", "openpyxl>=3.0"]
+
+[dependency-groups]
+dev = ["jupyter"]
+
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["html_doc*"]
+
+[tool.setuptools.package-data]
+html_doc = ["*.yaml", "generate_documentation_v7.py"]
+
+[project.entry-points."cognite.neat.plugin.data_model.file_writers"]
+html_doc = "html_doc.plugin:HtmlDocPlugin"
+

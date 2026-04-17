@@ -1,0 +1,4597 @@
+Metadata:
+- Key: space
+  Value: cdf_cdm
+- Key: externalId
+  Value: CogniteCore
+- Key: version
+  Value: v1
+- Key: name
+  Value: Cognite core data model
+- Key: description
+  Value: Cognite core data model
+Properties:
+- View: CogniteDescribable
+  View Property: name
+  Description: Name of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: name
+  Container Property Name: Name
+  Container Property Description: Holds a name of the instance where that is applicable
+  Index: btree:name(bySpace=False,cursorable=False)
+  Connection: null
+- View: CogniteDescribable
+  View Property: description
+  Description: Description of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: description
+  Container Property Name: Description
+  Container Property Description: Holds a description of the instance
+  Connection: null
+- View: CogniteDescribable
+  View Property: tags
+  Description: Text based labels for generic use, limited to 1000
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: tags
+  Container Property Name: Tags
+  Container Property Description: Instance tags (limited to 1000 tags)
+  Connection: null
+- View: CogniteDescribable
+  View Property: aliases
+  Description: Alternative names for the node
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: aliases
+  Container Property Name: Aliases
+  Container Property Description: Alternative names (aliases)
+  Connection: null
+- View: CogniteSourceable
+  View Property: sourceId
+  Description: Identifier from the source system
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceId
+  Container Property Name: Source ID
+  Container Property Description: Identifier in the source system
+  Index: btree:sourceId(bySpace=False,cursorable=True)
+  Connection: null
+- View: CogniteSourceable
+  View Property: sourceContext
+  Description: Context of the source id. For systems where the sourceId is globally
+    unique, the sourceContext is expected to not be set.
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceContext
+  Container Property Name: Source context
+  Container Property Description: Context of the source id. For systems where the
+    sourceId is globally unique, the sourceContext is expected to not be set.
+  Connection: null
+- View: CogniteSourceable
+  View Property: source
+  Description: Direct relation to a source system
+  Connection: direct(container=CogniteSourceSystem)
+  Value Type: CogniteSourceSystem
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: source
+  Container Property Name: Source
+  Container Property Description: Direct relation to source system instance
+  Index: btree:source(bySpace=False,cursorable=False)
+- View: CogniteSourceable
+  View Property: sourceCreatedTime
+  Description: When the instance was created in source system (if available)
+  Value Type: timestamp
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceCreatedTime
+  Container Property Name: Source created
+  Container Property Description: When the instance was created in source system (if
+    available)
+  Index: btree:sourceCreatedTime(bySpace=False,cursorable=False)
+  Connection: null
+- View: CogniteSourceable
+  View Property: sourceUpdatedTime
+  Description: When the instance was last updated in the source system (if available)
+  Value Type: timestamp
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceUpdatedTime
+  Container Property Name: Source last updated
+  Container Property Description: When the instance was last updated in the source
+    system (if available)
+  Index: btree:sourceUpdatedTime(bySpace=False,cursorable=True)
+  Connection: null
+- View: CogniteSourceable
+  View Property: sourceCreatedUser
+  Description: User identifier from the source system on who created the source data.
+    This identifier is not guaranteed to match the user identifiers in CDF
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceCreatedUser
+  Container Property Name: Source created by
+  Container Property Description: User identifier from the source system on who created
+    the source data. This identifier is not guaranteed to match user identifiers in
+    CDF
+  Connection: null
+- View: CogniteSourceable
+  View Property: sourceUpdatedUser
+  Description: User identifier from the source system on who last updated the source
+    data. This identifier is not guaranteed to match the user identifiers in CDF
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceUpdatedUser
+  Container Property Name: Source last updated by
+  Container Property Description: User identifier from the source system on who last
+    updated the source data. This identifier is not guaranteed to match user identifiers
+    in CDF
+  Connection: null
+- View: CogniteSourceSystem
+  View Property: name
+  Description: Name of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: name
+  Container Property Name: Name
+  Container Property Description: Holds a name of the instance where that is applicable
+  Index: btree:name(bySpace=False,cursorable=False)
+  Connection: null
+- View: CogniteSourceSystem
+  View Property: description
+  Description: Description of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: description
+  Container Property Name: Description
+  Container Property Description: Holds a description of the instance
+  Connection: null
+- View: CogniteSourceSystem
+  View Property: tags
+  Description: Text based labels for generic use, limited to 1000
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: tags
+  Container Property Name: Tags
+  Container Property Description: Instance tags (limited to 1000 tags)
+  Connection: null
+- View: CogniteSourceSystem
+  View Property: aliases
+  Description: Alternative names for the node
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: aliases
+  Container Property Name: Aliases
+  Container Property Description: Alternative names (aliases)
+  Connection: null
+- View: CogniteSourceSystem
+  View Property: version
+  Description: Version identifier for the source system
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceSystem
+  Container Property: version
+  Container Property Name: Version
+  Container Property Description: Version identifier for the source system
+  Connection: null
+- View: CogniteSourceSystem
+  View Property: manufacturer
+  Description: Manufacturer of the source system
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceSystem
+  Container Property: manufacturer
+  Container Property Name: Manufacturer
+  Container Property Description: Manufacturer of the source system
+  Connection: null
+- View: CogniteSchedulable
+  View Property: startTime
+  Description: The actual start time of an activity (or similar that extends this)
+  Value Type: timestamp
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSchedulable
+  Container Property: startTime
+  Container Property Name: Start time
+  Container Property Description: The actual start time of an activity (or similar
+    that extends this)
+  Index: btree:startTime(bySpace=False,cursorable=True)
+  Connection: null
+- View: CogniteSchedulable
+  View Property: endTime
+  Description: The actual end time of an activity (or similar that extends this)
+  Value Type: timestamp
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSchedulable
+  Container Property: endTime
+  Container Property Name: End time
+  Container Property Description: The actual end time of an activity (or similar that
+    extends this)
+  Index: btree:endTime(bySpace=False,cursorable=True)
+  Connection: null
+- View: CogniteSchedulable
+  View Property: scheduledStartTime
+  Description: The planned start time of an activity (or similar that extends this)
+  Value Type: timestamp
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSchedulable
+  Container Property: scheduledStartTime
+  Container Property Name: Scheduled start time
+  Container Property Description: The planned start time of an activity (or similar
+    that extends this)
+  Index: btree:scheduledStartTime(bySpace=False,cursorable=True)
+  Connection: null
+- View: CogniteSchedulable
+  View Property: scheduledEndTime
+  Description: The planned end time of an activity (or similar that extends this)
+  Value Type: timestamp
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSchedulable
+  Container Property: scheduledEndTime
+  Container Property Name: Scheduled end time
+  Container Property Description: The planned end time of an activity (or similar
+    that extends this)
+  Index: btree:scheduledEndTime(bySpace=False,cursorable=True)
+  Connection: null
+- View: CogniteVisualizable
+  View Property: object3D
+  Description: Direct relation to an Object3D instance representing the 3D resource
+  Connection: direct
+  Value Type: Cognite3DObject
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteVisualizable
+  Container Property: object3D
+  Container Property Name: 3D object
+  Container Property Description: Direct relation to an Object3D instance representing
+    the 3D resource
+  Constraint: uniqueness:uniqueObject3D(bySpace=False)
+- View: Cognite3DTransformation
+  View Property: translationX
+  Description: The displacement of the object along the X-axis in the 3D coordinate
+    system
+  Value Type: float64
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DTransformation
+  Container Property: translationX
+  Connection: null
+- View: Cognite3DTransformation
+  View Property: translationY
+  Description: The displacement of the object along the Y-axis in the 3D coordinate
+    system
+  Value Type: float64
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DTransformation
+  Container Property: translationY
+  Connection: null
+- View: Cognite3DTransformation
+  View Property: translationZ
+  Description: The displacement of the object along the Z-axis in the 3D coordinate
+    system
+  Value Type: float64
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DTransformation
+  Container Property: translationZ
+  Connection: null
+- View: Cognite3DTransformation
+  View Property: eulerRotationX
+  Description: The rotation of the object around the X-axis in radians
+  Value Type: float64
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DTransformation
+  Container Property: eulerRotationX
+  Connection: null
+- View: Cognite3DTransformation
+  View Property: eulerRotationY
+  Description: The rotation of the object around the Y-axis in radians
+  Value Type: float64
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DTransformation
+  Container Property: eulerRotationY
+  Connection: null
+- View: Cognite3DTransformation
+  View Property: eulerRotationZ
+  Description: The rotation of the object around the Z-axis in radians
+  Value Type: float64
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DTransformation
+  Container Property: eulerRotationZ
+  Connection: null
+- View: Cognite3DTransformation
+  View Property: scaleX
+  Description: The scaling factor applied to the object along the X-axis
+  Value Type: float64
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DTransformation
+  Container Property: scaleX
+  Connection: null
+- View: Cognite3DTransformation
+  View Property: scaleY
+  Description: The scaling factor applied to the object along the Y-axis
+  Value Type: float64
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DTransformation
+  Container Property: scaleY
+  Connection: null
+- View: Cognite3DTransformation
+  View Property: scaleZ
+  Description: The scaling factor applied to the object along the Z-axis
+  Value Type: float64
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DTransformation
+  Container Property: scaleZ
+  Connection: null
+- View: CogniteCubeMap
+  View Property: front
+  Description: Direct relation to a file holding the front projection of the cube
+    map
+  Connection: direct(container=CogniteFile)
+  Value Type: CogniteFile
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:CogniteCubeMap
+  Container Property: front
+- View: CogniteCubeMap
+  View Property: back
+  Description: Direct relation to a file holding the back projection of the cube map
+  Connection: direct(container=CogniteFile)
+  Value Type: CogniteFile
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:CogniteCubeMap
+  Container Property: back
+- View: CogniteCubeMap
+  View Property: left
+  Description: Direct relation to a file holding the left projection of the cube map
+  Connection: direct(container=CogniteFile)
+  Value Type: CogniteFile
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:CogniteCubeMap
+  Container Property: left
+- View: CogniteCubeMap
+  View Property: right
+  Description: Direct relation to a file holding the right projection of the cube
+    map
+  Connection: direct(container=CogniteFile)
+  Value Type: CogniteFile
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:CogniteCubeMap
+  Container Property: right
+- View: CogniteCubeMap
+  View Property: top
+  Description: Direct relation to a file holding the top projection of the cube map
+  Connection: direct(container=CogniteFile)
+  Value Type: CogniteFile
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:CogniteCubeMap
+  Container Property: top
+- View: CogniteCubeMap
+  View Property: bottom
+  Description: Direct relation to a file holding the bottom projection of the cube
+    map
+  Connection: direct(container=CogniteFile)
+  Value Type: CogniteFile
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:CogniteCubeMap
+  Container Property: bottom
+- View: Cognite3DObject
+  View Property: name
+  Description: Name of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: name
+  Container Property Name: Name
+  Container Property Description: Holds a name of the instance where that is applicable
+  Index: btree:name(bySpace=False,cursorable=False)
+  Connection: null
+- View: Cognite3DObject
+  View Property: description
+  Description: Description of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: description
+  Container Property Name: Description
+  Container Property Description: Holds a description of the instance
+  Connection: null
+- View: Cognite3DObject
+  View Property: tags
+  Description: Text based labels for generic use, limited to 1000
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: tags
+  Container Property Name: Tags
+  Container Property Description: Instance tags (limited to 1000 tags)
+  Connection: null
+- View: Cognite3DObject
+  View Property: aliases
+  Description: Alternative names for the node
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: aliases
+  Container Property Name: Aliases
+  Container Property Description: Alternative names (aliases)
+  Connection: null
+- View: Cognite3DObject
+  View Property: xMin
+  Description: Lowest X value in bounding box
+  Value Type: float64
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DObject
+  Container Property: xMin
+  Connection: null
+- View: Cognite3DObject
+  View Property: xMax
+  Description: Highest X value in bounding box
+  Value Type: float64
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DObject
+  Container Property: xMax
+  Connection: null
+- View: Cognite3DObject
+  View Property: yMin
+  Description: Lowest Y value in bounding box
+  Value Type: float64
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DObject
+  Container Property: yMin
+  Connection: null
+- View: Cognite3DObject
+  View Property: yMax
+  Description: Highest Y value in bounding box
+  Value Type: float64
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DObject
+  Container Property: yMax
+  Connection: null
+- View: Cognite3DObject
+  View Property: zMin
+  Description: Lowest Z value in bounding box
+  Value Type: float64
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DObject
+  Container Property: zMin
+  Connection: null
+- View: Cognite3DObject
+  View Property: zMax
+  Description: Highest Z value in bounding box
+  Value Type: float64
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DObject
+  Container Property: zMax
+  Connection: null
+- View: Cognite3DObject
+  View Property: asset
+  Description: Asset that is tied to this 3D object
+  Connection: reverse(property=object3D)
+  Value Type: CogniteAsset
+  Min Count: 0
+  Max Count: 1
+- View: Cognite3DObject
+  View Property: cadNodes
+  Description: List of up to 1000 CADNodes that represents the connected CogniteAsset
+  Connection: reverse(property=object3D)
+  Value Type: CogniteCADNode
+  Min Count: 0
+  Max Count: null
+- View: Cognite3DObject
+  View Property: images360
+  Description: Edge connection to Cognite360Image annotations that represents the
+    connected CogniteAsset
+  Connection: edge(edgeSource=Cognite360ImageAnnotation,type=image-360-annotation)
+  Value Type: Cognite360Image
+  Min Count: 0
+  Max Count: null
+- View: Cognite3DObject
+  View Property: pointCloudVolumes
+  Description: List of up to 1000 PointCloudVolumes that represents the connected
+    CogniteAsset
+  Connection: reverse(property=object3D)
+  Value Type: CognitePointCloudVolume
+  Min Count: 0
+  Max Count: null
+- View: Cognite3DModel
+  View Property: name
+  Description: Name of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: name
+  Container Property Name: Name
+  Container Property Description: Holds a name of the instance where that is applicable
+  Index: btree:name(bySpace=False,cursorable=False)
+  Connection: null
+- View: Cognite3DModel
+  View Property: description
+  Description: Description of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: description
+  Container Property Name: Description
+  Container Property Description: Holds a description of the instance
+  Connection: null
+- View: Cognite3DModel
+  View Property: tags
+  Description: Text based labels for generic use, limited to 1000
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: tags
+  Container Property Name: Tags
+  Container Property Description: Instance tags (limited to 1000 tags)
+  Connection: null
+- View: Cognite3DModel
+  View Property: aliases
+  Description: Alternative names for the node
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: aliases
+  Container Property Name: Aliases
+  Container Property Description: Alternative names (aliases)
+  Connection: null
+- View: Cognite3DModel
+  View Property: thumbnail
+  Description: Thumbnail of the 3D model
+  Connection: direct(container=CogniteFile)
+  Value Type: CogniteFile
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DModel
+  Container Property: thumbnail
+- View: Cognite3DModel
+  View Property: type
+  Description: CAD, PointCloud or Image360
+  Value Type: enum(collection=Cognite3DModel.type)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DModel
+  Container Property: type
+  Connection: null
+- View: CogniteCADModel
+  View Property: name
+  Description: Name of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: name
+  Container Property Name: Name
+  Container Property Description: Holds a name of the instance where that is applicable
+  Index: btree:name(bySpace=False,cursorable=False)
+  Connection: null
+- View: CogniteCADModel
+  View Property: description
+  Description: Description of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: description
+  Container Property Name: Description
+  Container Property Description: Holds a description of the instance
+  Connection: null
+- View: CogniteCADModel
+  View Property: tags
+  Description: Text based labels for generic use, limited to 1000
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: tags
+  Container Property Name: Tags
+  Container Property Description: Instance tags (limited to 1000 tags)
+  Connection: null
+- View: CogniteCADModel
+  View Property: aliases
+  Description: Alternative names for the node
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: aliases
+  Container Property Name: Aliases
+  Container Property Description: Alternative names (aliases)
+  Connection: null
+- View: CogniteCADModel
+  View Property: thumbnail
+  Description: Thumbnail of the 3D model
+  Connection: direct(container=CogniteFile)
+  Value Type: CogniteFile
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DModel
+  Container Property: thumbnail
+- View: CogniteCADModel
+  View Property: type
+  Description: CAD, PointCloud or Image360
+  Value Type: enum(collection=Cognite3DModel.type)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DModel
+  Container Property: type
+  Connection: null
+- View: CogniteCADModel
+  View Property: revisions
+  Description: List of revisions for this CAD model
+  Connection: reverse(property=model3D)
+  Value Type: CogniteCADRevision
+  Min Count: 0
+  Max Count: null
+- View: Cognite3DRevision
+  View Property: status
+  Value Type: enum(collection=Cognite3DRevision.status)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DRevision
+  Container Property: status
+  Connection: null
+- View: Cognite3DRevision
+  View Property: published
+  Value Type: boolean
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DRevision
+  Container Property: published
+  Connection: null
+- View: Cognite3DRevision
+  View Property: type
+  Value Type: enum(collection=Cognite3DRevision.type)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DRevision
+  Container Property: type
+  Connection: null
+- View: Cognite3DRevision
+  View Property: model3D
+  Connection: direct(container=cdf_cdm_3d:Cognite3DModel)
+  Value Type: Cognite3DModel
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DRevision
+  Container Property: model3D
+- View: CognitePointCloudModel
+  View Property: name
+  Description: Name of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: name
+  Container Property Name: Name
+  Container Property Description: Holds a name of the instance where that is applicable
+  Index: btree:name(bySpace=False,cursorable=False)
+  Connection: null
+- View: CognitePointCloudModel
+  View Property: description
+  Description: Description of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: description
+  Container Property Name: Description
+  Container Property Description: Holds a description of the instance
+  Connection: null
+- View: CognitePointCloudModel
+  View Property: tags
+  Description: Text based labels for generic use, limited to 1000
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: tags
+  Container Property Name: Tags
+  Container Property Description: Instance tags (limited to 1000 tags)
+  Connection: null
+- View: CognitePointCloudModel
+  View Property: aliases
+  Description: Alternative names for the node
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: aliases
+  Container Property Name: Aliases
+  Container Property Description: Alternative names (aliases)
+  Connection: null
+- View: CognitePointCloudModel
+  View Property: thumbnail
+  Description: Thumbnail of the 3D model
+  Connection: direct(container=CogniteFile)
+  Value Type: CogniteFile
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DModel
+  Container Property: thumbnail
+- View: CognitePointCloudModel
+  View Property: type
+  Description: CAD, PointCloud or Image360
+  Value Type: enum(collection=Cognite3DModel.type)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DModel
+  Container Property: type
+  Connection: null
+- View: CognitePointCloudModel
+  View Property: revisions
+  Description: List of revisions for this PointCloud model
+  Connection: reverse(property=model3D)
+  Value Type: CognitePointCloudRevision
+  Min Count: 0
+  Max Count: null
+- View: Cognite360ImageModel
+  View Property: name
+  Description: Name of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: name
+  Container Property Name: Name
+  Container Property Description: Holds a name of the instance where that is applicable
+  Index: btree:name(bySpace=False,cursorable=False)
+  Connection: null
+- View: Cognite360ImageModel
+  View Property: description
+  Description: Description of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: description
+  Container Property Name: Description
+  Container Property Description: Holds a description of the instance
+  Connection: null
+- View: Cognite360ImageModel
+  View Property: tags
+  Description: Text based labels for generic use, limited to 1000
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: tags
+  Container Property Name: Tags
+  Container Property Description: Instance tags (limited to 1000 tags)
+  Connection: null
+- View: Cognite360ImageModel
+  View Property: aliases
+  Description: Alternative names for the node
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: aliases
+  Container Property Name: Aliases
+  Container Property Description: Alternative names (aliases)
+  Connection: null
+- View: Cognite360ImageModel
+  View Property: thumbnail
+  Description: Thumbnail of the 3D model
+  Connection: direct(container=CogniteFile)
+  Value Type: CogniteFile
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DModel
+  Container Property: thumbnail
+- View: Cognite360ImageModel
+  View Property: type
+  Description: CAD, PointCloud or Image360
+  Value Type: enum(collection=Cognite3DModel.type)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DModel
+  Container Property: type
+  Connection: null
+- View: Cognite360ImageModel
+  View Property: collections
+  Description: List Cognite360Image collections for this instance
+  Connection: reverse(property=model3D)
+  Value Type: Cognite360ImageCollection
+  Min Count: 0
+  Max Count: null
+- View: CogniteCADRevision
+  View Property: status
+  Value Type: enum(collection=Cognite3DRevision.status)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DRevision
+  Container Property: status
+  Connection: null
+- View: CogniteCADRevision
+  View Property: published
+  Value Type: boolean
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DRevision
+  Container Property: published
+  Connection: null
+- View: CogniteCADRevision
+  View Property: type
+  Value Type: enum(collection=Cognite3DRevision.type)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DRevision
+  Container Property: type
+  Connection: null
+- View: CogniteCADRevision
+  View Property: model3D
+  Description: .
+  Connection: direct(container=cdf_cdm_3d:Cognite3DModel)
+  Value Type: CogniteCADModel
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DRevision
+  Container Property: model3D
+- View: CogniteCADRevision
+  View Property: revisionId
+  Description: The 3D API revision identifier for this CAD model
+  Value Type: int64
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:CogniteCADRevision
+  Container Property: revisionId
+  Connection: null
+- View: CognitePointCloudRevision
+  View Property: status
+  Value Type: enum(collection=Cognite3DRevision.status)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DRevision
+  Container Property: status
+  Connection: null
+- View: CognitePointCloudRevision
+  View Property: published
+  Value Type: boolean
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DRevision
+  Container Property: published
+  Connection: null
+- View: CognitePointCloudRevision
+  View Property: type
+  Value Type: enum(collection=Cognite3DRevision.type)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DRevision
+  Container Property: type
+  Connection: null
+- View: CognitePointCloudRevision
+  View Property: model3D
+  Description: .
+  Connection: direct(container=cdf_cdm_3d:Cognite3DModel)
+  Value Type: CognitePointCloudModel
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DRevision
+  Container Property: model3D
+- View: CognitePointCloudRevision
+  View Property: revisionId
+  Description: The 3D API revision identifier for this PointCloud model
+  Value Type: int64
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:CognitePointCloudRevision
+  Container Property: revisionId
+  Connection: null
+- View: Cognite360ImageCollection
+  View Property: name
+  Description: Name of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: name
+  Container Property Name: Name
+  Container Property Description: Holds a name of the instance where that is applicable
+  Index: btree:name(bySpace=False,cursorable=False)
+  Connection: null
+- View: Cognite360ImageCollection
+  View Property: description
+  Description: Description of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: description
+  Container Property Name: Description
+  Container Property Description: Holds a description of the instance
+  Connection: null
+- View: Cognite360ImageCollection
+  View Property: tags
+  Description: Text based labels for generic use, limited to 1000
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: tags
+  Container Property Name: Tags
+  Container Property Description: Instance tags (limited to 1000 tags)
+  Connection: null
+- View: Cognite360ImageCollection
+  View Property: aliases
+  Description: Alternative names for the node
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: aliases
+  Container Property Name: Aliases
+  Container Property Description: Alternative names (aliases)
+  Connection: null
+- View: Cognite360ImageCollection
+  View Property: status
+  Value Type: enum(collection=Cognite3DRevision.status)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DRevision
+  Container Property: status
+  Connection: null
+- View: Cognite360ImageCollection
+  View Property: published
+  Value Type: boolean
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DRevision
+  Container Property: published
+  Connection: null
+- View: Cognite360ImageCollection
+  View Property: type
+  Value Type: enum(collection=Cognite3DRevision.type)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DRevision
+  Container Property: type
+  Connection: null
+- View: Cognite360ImageCollection
+  View Property: model3D
+  Description: ''
+  Connection: direct(container=cdf_cdm_3d:Cognite3DModel)
+  Value Type: Cognite360ImageModel
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DRevision
+  Container Property: model3D
+- View: CogniteCADNode
+  View Property: name
+  Description: Name of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: name
+  Container Property Name: Name
+  Container Property Description: Holds a name of the instance where that is applicable
+  Index: btree:name(bySpace=False,cursorable=False)
+  Connection: null
+- View: CogniteCADNode
+  View Property: description
+  Description: Description of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: description
+  Container Property Name: Description
+  Container Property Description: Holds a description of the instance
+  Connection: null
+- View: CogniteCADNode
+  View Property: tags
+  Description: Text based labels for generic use, limited to 1000
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: tags
+  Container Property Name: Tags
+  Container Property Description: Instance tags (limited to 1000 tags)
+  Connection: null
+- View: CogniteCADNode
+  View Property: aliases
+  Description: Alternative names for the node
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: aliases
+  Container Property Name: Aliases
+  Container Property Description: Alternative names (aliases)
+  Connection: null
+- View: CogniteCADNode
+  View Property: object3D
+  Description: Direct relation to object3D grouping for this node
+  Connection: direct(container=cdf_cdm_3d:Cognite3DObject)
+  Value Type: Cognite3DObject
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:CogniteCADNode
+  Container Property: object3D
+- View: CogniteCADNode
+  View Property: model3D
+  Description: Direct relation to Cognite3DModel
+  Connection: direct(container=cdf_cdm_3d:Cognite3DModel)
+  Value Type: CogniteCADModel
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:CogniteCADNode
+  Container Property: model3D
+- View: CogniteCADNode
+  View Property: cadNodeReference
+  Description: Reference to a node within a CAD model from the 3D API
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:CogniteCADNode
+  Container Property: cadNodeReference
+  Connection: null
+- View: CogniteCADNode
+  View Property: revisions
+  Description: List of direct relations to instances of Cognite3DRevision which this
+    CogniteCADNode exists in.
+  Connection: direct(container=cdf_cdm_3d:Cognite3DRevision)
+  Value Type: CogniteCADRevision
+  Min Count: 0
+  Max Count: 100
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:CogniteCADNode
+  Container Property: revisions
+- View: CogniteCADNode
+  View Property: treeIndexes
+  Description: 'List of tree indexes in the same order as revisions. Used by Reveal
+    and similar applications to map from CogniteCADNode to tree index
+
+    '
+  Value Type: int64
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:CogniteCADNode
+  Container Property: treeIndexes
+  Connection: null
+- View: CogniteCADNode
+  View Property: subTreeSizes
+  Description: 'List of subtree sizes in the same order as revisions. Used by Reveal
+    and similar applications to know how many nodes exists below this node in the
+    hierarchy
+
+    '
+  Value Type: int64
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:CogniteCADNode
+  Container Property: subTreeSizes
+  Connection: null
+- View: CognitePointCloudVolume
+  View Property: name
+  Description: Name of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: name
+  Container Property Name: Name
+  Container Property Description: Holds a name of the instance where that is applicable
+  Index: btree:name(bySpace=False,cursorable=False)
+  Connection: null
+- View: CognitePointCloudVolume
+  View Property: description
+  Description: Description of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: description
+  Container Property Name: Description
+  Container Property Description: Holds a description of the instance
+  Connection: null
+- View: CognitePointCloudVolume
+  View Property: tags
+  Description: Text based labels for generic use, limited to 1000
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: tags
+  Container Property Name: Tags
+  Container Property Description: Instance tags (limited to 1000 tags)
+  Connection: null
+- View: CognitePointCloudVolume
+  View Property: aliases
+  Description: Alternative names for the node
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: aliases
+  Container Property Name: Aliases
+  Container Property Description: Alternative names (aliases)
+  Connection: null
+- View: CognitePointCloudVolume
+  View Property: object3D
+  Description: Direct relation to object3D grouping for this node
+  Connection: direct(container=cdf_cdm_3d:Cognite3DObject)
+  Value Type: Cognite3DObject
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:CognitePointCloudVolume
+  Container Property: object3D
+- View: CognitePointCloudVolume
+  View Property: model3D
+  Description: Direct relation to Cognite3DModel instance
+  Connection: direct(container=cdf_cdm_3d:Cognite3DModel)
+  Value Type: CogniteCADModel
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:CognitePointCloudVolume
+  Container Property: model3D
+- View: CognitePointCloudVolume
+  View Property: volumeReferences
+  Description: Unique volume metric hashes used to access the 3D specialized data
+    storage
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:CognitePointCloudVolume
+  Container Property: volumeReferences
+  Connection: null
+- View: CognitePointCloudVolume
+  View Property: revisions
+  Description: List of direct relations to revision information
+  Connection: direct(container=cdf_cdm_3d:Cognite3DRevision)
+  Value Type: CogniteCADRevision
+  Min Count: 0
+  Max Count: 100
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:CognitePointCloudVolume
+  Container Property: revisions
+- View: CognitePointCloudVolume
+  View Property: volumeType
+  Description: Type of volume (Cylinder or Box)
+  Value Type: enum(collection=CognitePointCloudVolume.volumeType)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:CognitePointCloudVolume
+  Container Property: volumeType
+  Connection: null
+- View: CognitePointCloudVolume
+  View Property: volume
+  Description: Relevant coordinates for the volume type, 9 floats in total, that defines
+    the volume
+  Value Type: float64
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:CognitePointCloudVolume
+  Container Property: volume
+  Connection: null
+- View: CognitePointCloudVolume
+  View Property: formatVersion
+  Description: "Specifies the version the \u2018volume\u2019 field is following. Volume\
+    \ definition is today 9 floats (property volume)\n"
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:CognitePointCloudVolume
+  Container Property: formatVersion
+  Connection: null
+- View: Cognite360Image
+  View Property: translationX
+  Description: The displacement of the object along the X-axis in the 3D coordinate
+    system
+  Value Type: float64
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DTransformation
+  Container Property: translationX
+  Connection: null
+- View: Cognite360Image
+  View Property: translationY
+  Description: The displacement of the object along the Y-axis in the 3D coordinate
+    system
+  Value Type: float64
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DTransformation
+  Container Property: translationY
+  Connection: null
+- View: Cognite360Image
+  View Property: translationZ
+  Description: The displacement of the object along the Z-axis in the 3D coordinate
+    system
+  Value Type: float64
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DTransformation
+  Container Property: translationZ
+  Connection: null
+- View: Cognite360Image
+  View Property: eulerRotationX
+  Description: The rotation of the object around the X-axis in radians
+  Value Type: float64
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DTransformation
+  Container Property: eulerRotationX
+  Connection: null
+- View: Cognite360Image
+  View Property: eulerRotationY
+  Description: The rotation of the object around the Y-axis in radians
+  Value Type: float64
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DTransformation
+  Container Property: eulerRotationY
+  Connection: null
+- View: Cognite360Image
+  View Property: eulerRotationZ
+  Description: The rotation of the object around the Z-axis in radians
+  Value Type: float64
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DTransformation
+  Container Property: eulerRotationZ
+  Connection: null
+- View: Cognite360Image
+  View Property: scaleX
+  Description: The scaling factor applied to the object along the X-axis
+  Value Type: float64
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DTransformation
+  Container Property: scaleX
+  Connection: null
+- View: Cognite360Image
+  View Property: scaleY
+  Description: The scaling factor applied to the object along the Y-axis
+  Value Type: float64
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DTransformation
+  Container Property: scaleY
+  Connection: null
+- View: Cognite360Image
+  View Property: scaleZ
+  Description: The scaling factor applied to the object along the Z-axis
+  Value Type: float64
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DTransformation
+  Container Property: scaleZ
+  Connection: null
+- View: Cognite360Image
+  View Property: front
+  Description: Direct relation to a file holding the front projection of the cube
+    map
+  Connection: direct(container=CogniteFile)
+  Value Type: CogniteFile
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:CogniteCubeMap
+  Container Property: front
+- View: Cognite360Image
+  View Property: back
+  Description: Direct relation to a file holding the back projection of the cube map
+  Connection: direct(container=CogniteFile)
+  Value Type: CogniteFile
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:CogniteCubeMap
+  Container Property: back
+- View: Cognite360Image
+  View Property: left
+  Description: Direct relation to a file holding the left projection of the cube map
+  Connection: direct(container=CogniteFile)
+  Value Type: CogniteFile
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:CogniteCubeMap
+  Container Property: left
+- View: Cognite360Image
+  View Property: right
+  Description: Direct relation to a file holding the right projection of the cube
+    map
+  Connection: direct(container=CogniteFile)
+  Value Type: CogniteFile
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:CogniteCubeMap
+  Container Property: right
+- View: Cognite360Image
+  View Property: top
+  Description: Direct relation to a file holding the top projection of the cube map
+  Connection: direct(container=CogniteFile)
+  Value Type: CogniteFile
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:CogniteCubeMap
+  Container Property: top
+- View: Cognite360Image
+  View Property: bottom
+  Description: Direct relation to a file holding the bottom projection of the cube
+    map
+  Connection: direct(container=CogniteFile)
+  Value Type: CogniteFile
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:CogniteCubeMap
+  Container Property: bottom
+- View: Cognite360Image
+  View Property: collection360
+  Description: Direct relation to Cognite360ImageCollection
+  Connection: direct(container=cdf_cdm_3d:Cognite3DRevision)
+  Value Type: Cognite360ImageCollection
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite360Image
+  Container Property: collection360
+- View: Cognite360Image
+  View Property: station360
+  Description: Direct relation to Cognite3DGroup instance that groups different Cognite360Image
+    instances to the same station
+  Connection: direct(container=cdf_cdm_3d:Cognite3DGroup)
+  Value Type: Cognite360ImageStation
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite360Image
+  Container Property: group3d
+- View: Cognite360Image
+  View Property: takenAt
+  Description: The timestamp when the 6 photos were taken
+  Value Type: timestamp
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite360Image
+  Container Property: takenAt
+  Container Property Description: The timestamp the 6 photos were taken.
+  Connection: null
+- View: Cognite360ImageStation
+  View Property: name
+  Description: Name of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: name
+  Container Property Name: Name
+  Container Property Description: Holds a name of the instance where that is applicable
+  Index: btree:name(bySpace=False,cursorable=False)
+  Connection: null
+- View: Cognite360ImageStation
+  View Property: description
+  Description: Description of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: description
+  Container Property Name: Description
+  Container Property Description: Holds a description of the instance
+  Connection: null
+- View: Cognite360ImageStation
+  View Property: tags
+  Description: Text based labels for generic use, limited to 1000
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: tags
+  Container Property Name: Tags
+  Container Property Description: Instance tags (limited to 1000 tags)
+  Connection: null
+- View: Cognite360ImageStation
+  View Property: aliases
+  Description: Alternative names for the node
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: aliases
+  Container Property Name: Aliases
+  Container Property Description: Alternative names (aliases)
+  Connection: null
+- View: Cognite360ImageStation
+  View Property: groupType
+  Description: Type of group
+  Value Type: enum(collection=Cognite3DGroup.groupType)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite3DGroup
+  Container Property: groupType
+  Connection: null
+- View: Cognite360ImageAnnotation
+  View Property: name
+  Description: Name of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: name
+  Container Property Name: Name
+  Container Property Description: Holds a name of the instance where that is applicable
+  Index: btree:name(bySpace=False,cursorable=False)
+  Connection: null
+- View: Cognite360ImageAnnotation
+  View Property: description
+  Description: Description of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: description
+  Container Property Name: Description
+  Container Property Description: Holds a description of the instance
+  Connection: null
+- View: Cognite360ImageAnnotation
+  View Property: tags
+  Description: Text based labels for generic use, limited to 1000
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: tags
+  Container Property Name: Tags
+  Container Property Description: Instance tags (limited to 1000 tags)
+  Connection: null
+- View: Cognite360ImageAnnotation
+  View Property: aliases
+  Description: Alternative names for the node
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: aliases
+  Container Property Name: Aliases
+  Container Property Description: Alternative names (aliases)
+  Connection: null
+- View: Cognite360ImageAnnotation
+  View Property: sourceId
+  Description: Identifier from the source system
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceId
+  Container Property Name: Source ID
+  Container Property Description: Identifier in the source system
+  Index: btree:sourceId(bySpace=False,cursorable=True)
+  Connection: null
+- View: Cognite360ImageAnnotation
+  View Property: sourceContext
+  Description: Context of the source id. For systems where the sourceId is globally
+    unique, the sourceContext is expected to not be set.
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceContext
+  Container Property Name: Source context
+  Container Property Description: Context of the source id. For systems where the
+    sourceId is globally unique, the sourceContext is expected to not be set.
+  Connection: null
+- View: Cognite360ImageAnnotation
+  View Property: source
+  Description: Direct relation to a source system
+  Connection: direct(container=CogniteSourceSystem)
+  Value Type: CogniteSourceSystem
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: source
+  Container Property Name: Source
+  Container Property Description: Direct relation to source system instance
+  Index: btree:source(bySpace=False,cursorable=False)
+- View: Cognite360ImageAnnotation
+  View Property: sourceCreatedTime
+  Description: When the instance was created in source system (if available)
+  Value Type: timestamp
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceCreatedTime
+  Container Property Name: Source created
+  Container Property Description: When the instance was created in source system (if
+    available)
+  Index: btree:sourceCreatedTime(bySpace=False,cursorable=False)
+  Connection: null
+- View: Cognite360ImageAnnotation
+  View Property: sourceUpdatedTime
+  Description: When the instance was last updated in the source system (if available)
+  Value Type: timestamp
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceUpdatedTime
+  Container Property Name: Source last updated
+  Container Property Description: When the instance was last updated in the source
+    system (if available)
+  Index: btree:sourceUpdatedTime(bySpace=False,cursorable=True)
+  Connection: null
+- View: Cognite360ImageAnnotation
+  View Property: sourceCreatedUser
+  Description: User identifier from the source system on who created the source data.
+    This identifier is not guaranteed to match the user identifiers in CDF
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceCreatedUser
+  Container Property Name: Source created by
+  Container Property Description: User identifier from the source system on who created
+    the source data. This identifier is not guaranteed to match user identifiers in
+    CDF
+  Connection: null
+- View: Cognite360ImageAnnotation
+  View Property: sourceUpdatedUser
+  Description: User identifier from the source system on who last updated the source
+    data. This identifier is not guaranteed to match the user identifiers in CDF
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceUpdatedUser
+  Container Property Name: Source last updated by
+  Container Property Description: User identifier from the source system on who last
+    updated the source data. This identifier is not guaranteed to match user identifiers
+    in CDF
+  Connection: null
+- View: Cognite360ImageAnnotation
+  View Property: confidence
+  Description: The confidence that the annotation is a good match
+  Value Type: float64
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteAnnotation
+  Container Property: confidence
+  Container Property Description: The confidence that the annotation is a good match
+  Connection: null
+- View: Cognite360ImageAnnotation
+  View Property: status
+  Description: The status of the annotation
+  Value Type: enum(collection=CogniteAnnotation.status)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteAnnotation
+  Container Property: status
+  Container Property Description: The status of the annotation
+  Connection: null
+- View: Cognite360ImageAnnotation
+  View Property: polygon
+  Description: List of floats representing the polygon. Format depends on formatVersion
+  Value Type: float64
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite360ImageAnnotation
+  Container Property: polygon
+  Connection: null
+- View: Cognite360ImageAnnotation
+  View Property: formatVersion
+  Description: Specifies the storage representation for the polygon
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: cdf_cdm_3d:Cognite360ImageAnnotation
+  Container Property: formatVersion
+  Connection: null
+- View: CogniteAsset
+  View Property: object3D
+  Description: Direct relation to an Object3D instance representing the 3D resource
+  Connection: direct
+  Value Type: Cognite3DObject
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteVisualizable
+  Container Property: object3D
+  Container Property Name: 3D object
+  Container Property Description: Direct relation to an Object3D instance representing
+    the 3D resource
+  Constraint: uniqueness:uniqueObject3D(bySpace=False)
+- View: CogniteAsset
+  View Property: name
+  Description: Name of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: name
+  Container Property Name: Name
+  Container Property Description: Holds a name of the instance where that is applicable
+  Index: btree:name(bySpace=False,cursorable=False)
+  Connection: null
+- View: CogniteAsset
+  View Property: description
+  Description: Description of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: description
+  Container Property Name: Description
+  Container Property Description: Holds a description of the instance
+  Connection: null
+- View: CogniteAsset
+  View Property: tags
+  Description: Text based labels for generic use, limited to 1000
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: tags
+  Container Property Name: Tags
+  Container Property Description: Instance tags (limited to 1000 tags)
+  Connection: null
+- View: CogniteAsset
+  View Property: aliases
+  Description: Alternative names for the node
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: aliases
+  Container Property Name: Aliases
+  Container Property Description: Alternative names (aliases)
+  Connection: null
+- View: CogniteAsset
+  View Property: sourceId
+  Description: Identifier from the source system
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceId
+  Container Property Name: Source ID
+  Container Property Description: Identifier in the source system
+  Index: btree:sourceId(bySpace=False,cursorable=True)
+  Connection: null
+- View: CogniteAsset
+  View Property: sourceContext
+  Description: Context of the source id. For systems where the sourceId is globally
+    unique, the sourceContext is expected to not be set.
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceContext
+  Container Property Name: Source context
+  Container Property Description: Context of the source id. For systems where the
+    sourceId is globally unique, the sourceContext is expected to not be set.
+  Connection: null
+- View: CogniteAsset
+  View Property: source
+  Description: Direct relation to a source system
+  Connection: direct(container=CogniteSourceSystem)
+  Value Type: CogniteSourceSystem
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: source
+  Container Property Name: Source
+  Container Property Description: Direct relation to source system instance
+  Index: btree:source(bySpace=False,cursorable=False)
+- View: CogniteAsset
+  View Property: sourceCreatedTime
+  Description: When the instance was created in source system (if available)
+  Value Type: timestamp
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceCreatedTime
+  Container Property Name: Source created
+  Container Property Description: When the instance was created in source system (if
+    available)
+  Index: btree:sourceCreatedTime(bySpace=False,cursorable=False)
+  Connection: null
+- View: CogniteAsset
+  View Property: sourceUpdatedTime
+  Description: When the instance was last updated in the source system (if available)
+  Value Type: timestamp
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceUpdatedTime
+  Container Property Name: Source last updated
+  Container Property Description: When the instance was last updated in the source
+    system (if available)
+  Index: btree:sourceUpdatedTime(bySpace=False,cursorable=True)
+  Connection: null
+- View: CogniteAsset
+  View Property: sourceCreatedUser
+  Description: User identifier from the source system on who created the source data.
+    This identifier is not guaranteed to match the user identifiers in CDF
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceCreatedUser
+  Container Property Name: Source created by
+  Container Property Description: User identifier from the source system on who created
+    the source data. This identifier is not guaranteed to match user identifiers in
+    CDF
+  Connection: null
+- View: CogniteAsset
+  View Property: sourceUpdatedUser
+  Description: User identifier from the source system on who last updated the source
+    data. This identifier is not guaranteed to match the user identifiers in CDF
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceUpdatedUser
+  Container Property Name: Source last updated by
+  Container Property Description: User identifier from the source system on who last
+    updated the source data. This identifier is not guaranteed to match user identifiers
+    in CDF
+  Connection: null
+- View: CogniteAsset
+  View Property: parent
+  Name: Parent
+  Description: The parent of the asset.
+  Connection: direct
+  Value Type: CogniteAsset
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteAsset
+  Container Property: assetHierarchy_parent
+  Container Property Description: Direct relation to closest (for ease of navigation)
+  Index: btree:parent(bySpace=False,cursorable=False)
+- View: CogniteAsset
+  View Property: root
+  Name: Root
+  Description: An automatically updated reference to the top-level asset of the hierarchy.
+  Connection: direct
+  Value Type: CogniteAsset
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteAsset
+  Container Property: assetHierarchy_root
+  Container Property Description: Direct relation to the root of the asset hierarchy
+    (primarily an optimization/convenience)
+  Index: btree:root(bySpace=False,cursorable=False)
+- View: CogniteAsset
+  View Property: path
+  Name: Path
+  Description: An automatically updated ordered list of this asset's ancestors, starting
+    with the root asset. Enables subtree filtering to find all assets under a parent.
+  Connection: direct
+  Value Type: CogniteAsset
+  Min Count: 0
+  Max Count: 100
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteAsset
+  Container Property: assetHierarchy_path
+  Container Property Description: Automatically populated list of ancestors to enable
+    subtree filtering
+  Index: btree:path(bySpace=False,cursorable=False)
+- View: CogniteAsset
+  View Property: pathLastUpdatedTime
+  Name: Path last updated time
+  Description: The last time the path was updated for this asset.
+  Value Type: timestamp
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteAsset
+  Container Property: assetHierarchy_path_last_updated_time
+  Container Property Description: Last time the path was updated for this asset
+  Connection: null
+- View: CogniteAsset
+  View Property: assetClass
+  Name: Asset class
+  Description: Specifies the class of the asset. It's a direct relation to CogniteAssetClass.
+  Connection: direct(container=CogniteAssetClass)
+  Value Type: CogniteAssetClass
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteAsset
+  Container Property: assetClass
+  Container Property Description: Class of asset, direct relation to AssetClass
+- View: CogniteAsset
+  View Property: type
+  Name: Asset type
+  Description: Specifies the type of the asset. It's a direct relation to CogniteAssetType.
+  Connection: direct(container=CogniteAssetType)
+  Value Type: CogniteAssetType
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteAsset
+  Container Property: type
+  Container Property Description: Type of asset, direct relation to AssetType
+- View: CogniteAsset
+  View Property: files
+  Name: Files
+  Description: An automatically updated list of files related to the asset.
+  Connection: reverse(property=assets)
+  Value Type: CogniteFile
+  Min Count: 0
+  Max Count: null
+- View: CogniteAsset
+  View Property: children
+  Name: Children
+  Description: An automatically updated list of assets with this asset as their parent.
+  Connection: reverse(property=parent)
+  Value Type: CogniteAsset
+  Min Count: 0
+  Max Count: null
+- View: CogniteAsset
+  View Property: equipment
+  Name: Equipment
+  Description: An automatically updated list of equipment related to the asset.
+  Connection: reverse(property=asset)
+  Value Type: CogniteEquipment
+  Min Count: 0
+  Max Count: null
+- View: CogniteAsset
+  View Property: activities
+  Name: Activities
+  Description: An automatically updated list of activities related to the asset.
+  Connection: reverse(property=assets)
+  Value Type: CogniteActivity
+  Min Count: 0
+  Max Count: null
+- View: CogniteAsset
+  View Property: timeSeries
+  Name: Time series
+  Description: An automatically updated list of time series related to the asset.
+  Connection: reverse(property=assets)
+  Value Type: CogniteTimeSeries
+  Min Count: 0
+  Max Count: null
+- View: CogniteAssetClass
+  View Property: name
+  Description: Name of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: name
+  Container Property Name: Name
+  Container Property Description: Holds a name of the instance where that is applicable
+  Index: btree:name(bySpace=False,cursorable=False)
+  Connection: null
+- View: CogniteAssetClass
+  View Property: description
+  Description: Description of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: description
+  Container Property Name: Description
+  Container Property Description: Holds a description of the instance
+  Connection: null
+- View: CogniteAssetClass
+  View Property: tags
+  Description: Text based labels for generic use, limited to 1000
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: tags
+  Container Property Name: Tags
+  Container Property Description: Instance tags (limited to 1000 tags)
+  Connection: null
+- View: CogniteAssetClass
+  View Property: aliases
+  Description: Alternative names for the node
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: aliases
+  Container Property Name: Aliases
+  Container Property Description: Alternative names (aliases)
+  Connection: null
+- View: CogniteAssetClass
+  View Property: code
+  Name: Code
+  Description: A unique identifier for the class of asset.
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteAssetClass
+  Container Property: code
+  Container Property Description: A unique identifier for the class of asset
+  Constraint: uniqueness:uniqueCodeConstraint(bySpace=True,order=1)
+  Connection: null
+- View: CogniteAssetClass
+  View Property: standard
+  Name: Standard
+  Description: A text string to specify which standard the class is from.
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteAssetClass
+  Container Property: standard
+  Container Property Description: Textual string for which standard the code is from
+  Constraint: uniqueness:uniqueCodeConstraint(bySpace=True,order=2)
+  Connection: null
+- View: CogniteAssetType
+  View Property: name
+  Description: Name of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: name
+  Container Property Name: Name
+  Container Property Description: Holds a name of the instance where that is applicable
+  Index: btree:name(bySpace=False,cursorable=False)
+  Connection: null
+- View: CogniteAssetType
+  View Property: description
+  Description: Description of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: description
+  Container Property Name: Description
+  Container Property Description: Holds a description of the instance
+  Connection: null
+- View: CogniteAssetType
+  View Property: tags
+  Description: Text based labels for generic use, limited to 1000
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: tags
+  Container Property Name: Tags
+  Container Property Description: Instance tags (limited to 1000 tags)
+  Connection: null
+- View: CogniteAssetType
+  View Property: aliases
+  Description: Alternative names for the node
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: aliases
+  Container Property Name: Aliases
+  Container Property Description: Alternative names (aliases)
+  Connection: null
+- View: CogniteAssetType
+  View Property: code
+  Name: Code
+  Description: A unique identifier for the type of asset.
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteAssetType
+  Container Property: code
+  Container Property Description: Identifier for the type of asset
+  Index: btree:code(bySpace=False,cursorable=True),btree:standard(bySpace=False,cursorable=True,order=2)
+  Connection: null
+- View: CogniteAssetType
+  View Property: standard
+  Name: Standard
+  Description: A text string to specify which standard the type is from.
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteAssetType
+  Container Property: standard
+  Container Property Description: Textual string for which standard the code is from
+  Index: btree:standard(bySpace=False,cursorable=True,order=1)
+  Connection: null
+- View: CogniteAssetType
+  View Property: assetClass
+  Name: Asset class
+  Description: Specifies the class the type belongs to. It's a direct relation to
+    CogniteAssetClass.
+  Connection: direct(container=CogniteAssetClass)
+  Value Type: CogniteAssetClass
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteAssetType
+  Container Property: assetClass
+  Container Property Description: Class of this type, direct relation to CogniteAssetClass
+- View: CogniteEquipment
+  View Property: name
+  Description: Name of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: name
+  Container Property Name: Name
+  Container Property Description: Holds a name of the instance where that is applicable
+  Index: btree:name(bySpace=False,cursorable=False)
+  Connection: null
+- View: CogniteEquipment
+  View Property: description
+  Description: Description of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: description
+  Container Property Name: Description
+  Container Property Description: Holds a description of the instance
+  Connection: null
+- View: CogniteEquipment
+  View Property: tags
+  Description: Text based labels for generic use, limited to 1000
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: tags
+  Container Property Name: Tags
+  Container Property Description: Instance tags (limited to 1000 tags)
+  Connection: null
+- View: CogniteEquipment
+  View Property: aliases
+  Description: Alternative names for the node
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: aliases
+  Container Property Name: Aliases
+  Container Property Description: Alternative names (aliases)
+  Connection: null
+- View: CogniteEquipment
+  View Property: sourceId
+  Description: Identifier from the source system
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceId
+  Container Property Name: Source ID
+  Container Property Description: Identifier in the source system
+  Index: btree:sourceId(bySpace=False,cursorable=True)
+  Connection: null
+- View: CogniteEquipment
+  View Property: sourceContext
+  Description: Context of the source id. For systems where the sourceId is globally
+    unique, the sourceContext is expected to not be set.
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceContext
+  Container Property Name: Source context
+  Container Property Description: Context of the source id. For systems where the
+    sourceId is globally unique, the sourceContext is expected to not be set.
+  Connection: null
+- View: CogniteEquipment
+  View Property: source
+  Description: Direct relation to a source system
+  Connection: direct(container=CogniteSourceSystem)
+  Value Type: CogniteSourceSystem
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: source
+  Container Property Name: Source
+  Container Property Description: Direct relation to source system instance
+  Index: btree:source(bySpace=False,cursorable=False)
+- View: CogniteEquipment
+  View Property: sourceCreatedTime
+  Description: When the instance was created in source system (if available)
+  Value Type: timestamp
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceCreatedTime
+  Container Property Name: Source created
+  Container Property Description: When the instance was created in source system (if
+    available)
+  Index: btree:sourceCreatedTime(bySpace=False,cursorable=False)
+  Connection: null
+- View: CogniteEquipment
+  View Property: sourceUpdatedTime
+  Description: When the instance was last updated in the source system (if available)
+  Value Type: timestamp
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceUpdatedTime
+  Container Property Name: Source last updated
+  Container Property Description: When the instance was last updated in the source
+    system (if available)
+  Index: btree:sourceUpdatedTime(bySpace=False,cursorable=True)
+  Connection: null
+- View: CogniteEquipment
+  View Property: sourceCreatedUser
+  Description: User identifier from the source system on who created the source data.
+    This identifier is not guaranteed to match the user identifiers in CDF
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceCreatedUser
+  Container Property Name: Source created by
+  Container Property Description: User identifier from the source system on who created
+    the source data. This identifier is not guaranteed to match user identifiers in
+    CDF
+  Connection: null
+- View: CogniteEquipment
+  View Property: sourceUpdatedUser
+  Description: User identifier from the source system on who last updated the source
+    data. This identifier is not guaranteed to match the user identifiers in CDF
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceUpdatedUser
+  Container Property Name: Source last updated by
+  Container Property Description: User identifier from the source system on who last
+    updated the source data. This identifier is not guaranteed to match user identifiers
+    in CDF
+  Connection: null
+- View: CogniteEquipment
+  View Property: asset
+  Name: Asset
+  Description: The asset the equipment is related to.
+  Connection: direct
+  Value Type: CogniteAsset
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteEquipment
+  Container Property: asset
+  Container Property Description: The asset this equipment is associated with
+  Index: btree:asset(bySpace=False,cursorable=True)
+- View: CogniteEquipment
+  View Property: serialNumber
+  Name: Serial number
+  Description: The serial number of the equipment.
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteEquipment
+  Container Property: serialNumber
+  Container Property Description: Serial number of the equipment
+  Index: btree:serialNumber(bySpace=False,cursorable=True)
+  Connection: null
+- View: CogniteEquipment
+  View Property: manufacturer
+  Name: Manufacturer
+  Description: The manufacturer of the equipment.
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteEquipment
+  Container Property: manufacturer
+  Container Property Description: Manufacturer of the equipment
+  Index: btree:manufacturer(bySpace=False,cursorable=True)
+  Connection: null
+- View: CogniteEquipment
+  View Property: equipmentType
+  Name: Equipment type
+  Description: Specifies the type of the equipment. It's a direct relation to CogniteEquipmentType.
+  Connection: direct(container=CogniteEquipmentType)
+  Value Type: CogniteEquipmentType
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteEquipment
+  Container Property: equipmentType
+  Container Property Description: Type of this equipment, direct relation to EquipmentType
+- View: CogniteEquipment
+  View Property: files
+  Name: Files
+  Description: A list of files the equipment relates to.
+  Connection: direct
+  Value Type: CogniteFile
+  Min Count: 0
+  Max Count: 100
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteEquipment
+  Container Property: files
+  Container Property Description: List of files this equipment relates to
+- View: CogniteEquipment
+  View Property: activities
+  Name: Activities
+  Description: An automatically updated list of activities related to the equipment.
+  Connection: reverse(property=equipment)
+  Value Type: CogniteActivity
+  Min Count: 0
+  Max Count: null
+- View: CogniteEquipment
+  View Property: timeSeries
+  Name: Time series
+  Description: An automatically updated list of time series related to the equipment.
+  Connection: reverse(property=equipment)
+  Value Type: CogniteTimeSeries
+  Min Count: 0
+  Max Count: null
+- View: CogniteEquipmentType
+  View Property: name
+  Description: Name of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: name
+  Container Property Name: Name
+  Container Property Description: Holds a name of the instance where that is applicable
+  Index: btree:name(bySpace=False,cursorable=False)
+  Connection: null
+- View: CogniteEquipmentType
+  View Property: description
+  Description: Description of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: description
+  Container Property Name: Description
+  Container Property Description: Holds a description of the instance
+  Connection: null
+- View: CogniteEquipmentType
+  View Property: tags
+  Description: Text based labels for generic use, limited to 1000
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: tags
+  Container Property Name: Tags
+  Container Property Description: Instance tags (limited to 1000 tags)
+  Connection: null
+- View: CogniteEquipmentType
+  View Property: aliases
+  Description: Alternative names for the node
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: aliases
+  Container Property Name: Aliases
+  Container Property Description: Alternative names (aliases)
+  Connection: null
+- View: CogniteEquipmentType
+  View Property: code
+  Name: Code
+  Description: A unique identifier for the type of equipment.
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteEquipmentType
+  Container Property: code
+  Container Property Description: A unique identifier for the type of equipment
+  Constraint: uniqueness:uniqueCodeConstraint(bySpace=True,order=1)
+  Connection: null
+- View: CogniteEquipmentType
+  View Property: equipmentClass
+  Name: Equipment class
+  Description: Represents the class of equipment.
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteEquipmentType
+  Container Property: equipmentClass
+  Container Property Description: Class of equipment
+  Connection: null
+- View: CogniteEquipmentType
+  View Property: standard
+  Name: Standard
+  Description: An identifier for the standard this equipment type is sourced from,
+    for example, ISO14224.
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteEquipmentType
+  Container Property: standard
+  Container Property Description: Standard identifier this equipment is sourced from,
+    such as ISO14224 or similar
+  Constraint: uniqueness:uniqueCodeConstraint(bySpace=True,order=2)
+  Connection: null
+- View: CogniteEquipmentType
+  View Property: standardReference
+  Name: Standard reference
+  Description: A reference to the source of the equipment standard.
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteEquipmentType
+  Container Property: standardReference
+  Container Property Description: Reference to the source of the equipment specification
+  Connection: null
+- View: CogniteFile
+  View Property: name
+  Description: Name of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: name
+  Container Property Name: Name
+  Container Property Description: Holds a name of the instance where that is applicable
+  Index: btree:name(bySpace=False,cursorable=False)
+  Connection: null
+- View: CogniteFile
+  View Property: description
+  Description: Description of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: description
+  Container Property Name: Description
+  Container Property Description: Holds a description of the instance
+  Connection: null
+- View: CogniteFile
+  View Property: tags
+  Description: Text based labels for generic use, limited to 1000
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: tags
+  Container Property Name: Tags
+  Container Property Description: Instance tags (limited to 1000 tags)
+  Connection: null
+- View: CogniteFile
+  View Property: aliases
+  Description: Alternative names for the node
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: aliases
+  Container Property Name: Aliases
+  Container Property Description: Alternative names (aliases)
+  Connection: null
+- View: CogniteFile
+  View Property: sourceId
+  Description: Identifier from the source system
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceId
+  Container Property Name: Source ID
+  Container Property Description: Identifier in the source system
+  Index: btree:sourceId(bySpace=False,cursorable=True)
+  Connection: null
+- View: CogniteFile
+  View Property: sourceContext
+  Description: Context of the source id. For systems where the sourceId is globally
+    unique, the sourceContext is expected to not be set.
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceContext
+  Container Property Name: Source context
+  Container Property Description: Context of the source id. For systems where the
+    sourceId is globally unique, the sourceContext is expected to not be set.
+  Connection: null
+- View: CogniteFile
+  View Property: source
+  Description: Direct relation to a source system
+  Connection: direct(container=CogniteSourceSystem)
+  Value Type: CogniteSourceSystem
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: source
+  Container Property Name: Source
+  Container Property Description: Direct relation to source system instance
+  Index: btree:source(bySpace=False,cursorable=False)
+- View: CogniteFile
+  View Property: sourceCreatedTime
+  Description: When the instance was created in source system (if available)
+  Value Type: timestamp
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceCreatedTime
+  Container Property Name: Source created
+  Container Property Description: When the instance was created in source system (if
+    available)
+  Index: btree:sourceCreatedTime(bySpace=False,cursorable=False)
+  Connection: null
+- View: CogniteFile
+  View Property: sourceUpdatedTime
+  Description: When the instance was last updated in the source system (if available)
+  Value Type: timestamp
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceUpdatedTime
+  Container Property Name: Source last updated
+  Container Property Description: When the instance was last updated in the source
+    system (if available)
+  Index: btree:sourceUpdatedTime(bySpace=False,cursorable=True)
+  Connection: null
+- View: CogniteFile
+  View Property: sourceCreatedUser
+  Description: User identifier from the source system on who created the source data.
+    This identifier is not guaranteed to match the user identifiers in CDF
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceCreatedUser
+  Container Property Name: Source created by
+  Container Property Description: User identifier from the source system on who created
+    the source data. This identifier is not guaranteed to match user identifiers in
+    CDF
+  Connection: null
+- View: CogniteFile
+  View Property: sourceUpdatedUser
+  Description: User identifier from the source system on who last updated the source
+    data. This identifier is not guaranteed to match the user identifiers in CDF
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceUpdatedUser
+  Container Property Name: Source last updated by
+  Container Property Description: User identifier from the source system on who last
+    updated the source data. This identifier is not guaranteed to match user identifiers
+    in CDF
+  Connection: null
+- View: CogniteFile
+  View Property: assets
+  Name: Assets
+  Description: A list of assets this file is related to.
+  Connection: direct
+  Value Type: CogniteAsset
+  Min Count: 0
+  Max Count: 1200
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteFile
+  Container Property: assets
+  Container Property Description: List of assets this file relates to
+- View: CogniteFile
+  View Property: mimeType
+  Name: MIME type
+  Description: The MIME type of the file.
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteFile
+  Container Property: mimeType
+  Container Property Description: MIME type of the file
+  Connection: null
+- View: CogniteFile
+  View Property: directory
+  Name: Directory
+  Description: Contains the path elements from the source (if the source system has
+    a file system hierarchy or similar.)
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteFile
+  Container Property: directory
+  Container Property Description: Contains the path elements from the source (for
+    when the source system has a file system hierarchy or similar)
+  Connection: null
+- View: CogniteFile
+  View Property: isUploaded
+  Name: Is uploaded
+  Description: Specifies if the file content has been uploaded to Cognite Data Fusion
+    or not.
+  Value Type: boolean
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Default: false
+  Auto Increment: false
+  Container: CogniteFile
+  Container Property: isUploaded
+  Container Property Description: Whether the file content has been uploaded to Cognite
+    Data Fusion
+  Connection: null
+- View: CogniteFile
+  View Property: uploadedTime
+  Name: Uploaded time
+  Description: The time the file upload completed.
+  Value Type: timestamp
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteFile
+  Container Property: uploadedTime
+  Container Property Description: When the file was uploaded to CDF
+  Connection: null
+- View: CogniteFile
+  View Property: category
+  Name: Category
+  Description: Specifies the detected category the file belongs to. It's a direct
+    relation to an instance of CogniteFileCategory.
+  Connection: direct
+  Value Type: CogniteFileCategory
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteFile
+  Container Property: category
+  Container Property Description: Direct relation to an instance of FileCategory representing
+    the detected categorization/class of the file
+- View: CogniteFile
+  View Property: equipment
+  Name: Equipment
+  Description: An automatically updated list of equipment this file is related to.
+  Connection: reverse(property=files)
+  Value Type: CogniteEquipment
+  Min Count: 0
+  Max Count: null
+- View: CogniteFileCategory
+  View Property: name
+  Description: Name of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: name
+  Container Property Name: Name
+  Container Property Description: Holds a name of the instance where that is applicable
+  Index: btree:name(bySpace=False,cursorable=False)
+  Connection: null
+- View: CogniteFileCategory
+  View Property: description
+  Description: Description of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: description
+  Container Property Name: Description
+  Container Property Description: Holds a description of the instance
+  Connection: null
+- View: CogniteFileCategory
+  View Property: tags
+  Description: Text based labels for generic use, limited to 1000
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: tags
+  Container Property Name: Tags
+  Container Property Description: Instance tags (limited to 1000 tags)
+  Connection: null
+- View: CogniteFileCategory
+  View Property: aliases
+  Description: Alternative names for the node
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: aliases
+  Container Property Name: Aliases
+  Container Property Description: Alternative names (aliases)
+  Connection: null
+- View: CogniteFileCategory
+  View Property: code
+  Name: Code
+  Description: An identifier for the category, for example, 'AA' for Accounting (from
+    Norsok.)
+  Value Type: text(collation=ucs_basic)
+  Min Count: 1
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteFileCategory
+  Container Property: code
+  Container Property Description: Class name for the type of file
+  Constraint: uniqueness:uniqueCodeConstraint(bySpace=True,order=1)
+  Connection: null
+- View: CogniteFileCategory
+  View Property: standard
+  Name: Standard
+  Description: The name of the standard the category originates from, for example,
+    'Norsok'.
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteFileCategory
+  Container Property: standard
+  Container Property Description: Standard identifier this category is sourced from,
+    such as NORSOK or similar
+  Constraint: uniqueness:uniqueCodeConstraint(bySpace=True,order=2)
+  Connection: null
+- View: CogniteFileCategory
+  View Property: standardReference
+  Name: Standard reference
+  Description: A reference to the source of the category standard.
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteFileCategory
+  Container Property: standardReference
+  Container Property Description: Reference to the source of the category standard
+  Connection: null
+- View: CogniteActivity
+  View Property: name
+  Description: Name of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: name
+  Container Property Name: Name
+  Container Property Description: Holds a name of the instance where that is applicable
+  Index: btree:name(bySpace=False,cursorable=False)
+  Connection: null
+- View: CogniteActivity
+  View Property: description
+  Description: Description of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: description
+  Container Property Name: Description
+  Container Property Description: Holds a description of the instance
+  Connection: null
+- View: CogniteActivity
+  View Property: tags
+  Description: Text based labels for generic use, limited to 1000
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: tags
+  Container Property Name: Tags
+  Container Property Description: Instance tags (limited to 1000 tags)
+  Connection: null
+- View: CogniteActivity
+  View Property: aliases
+  Description: Alternative names for the node
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: aliases
+  Container Property Name: Aliases
+  Container Property Description: Alternative names (aliases)
+  Connection: null
+- View: CogniteActivity
+  View Property: sourceId
+  Description: Identifier from the source system
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceId
+  Container Property Name: Source ID
+  Container Property Description: Identifier in the source system
+  Index: btree:sourceId(bySpace=False,cursorable=True)
+  Connection: null
+- View: CogniteActivity
+  View Property: sourceContext
+  Description: Context of the source id. For systems where the sourceId is globally
+    unique, the sourceContext is expected to not be set.
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceContext
+  Container Property Name: Source context
+  Container Property Description: Context of the source id. For systems where the
+    sourceId is globally unique, the sourceContext is expected to not be set.
+  Connection: null
+- View: CogniteActivity
+  View Property: source
+  Description: Direct relation to a source system
+  Connection: direct(container=CogniteSourceSystem)
+  Value Type: CogniteSourceSystem
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: source
+  Container Property Name: Source
+  Container Property Description: Direct relation to source system instance
+  Index: btree:source(bySpace=False,cursorable=False)
+- View: CogniteActivity
+  View Property: sourceCreatedTime
+  Description: When the instance was created in source system (if available)
+  Value Type: timestamp
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceCreatedTime
+  Container Property Name: Source created
+  Container Property Description: When the instance was created in source system (if
+    available)
+  Index: btree:sourceCreatedTime(bySpace=False,cursorable=False)
+  Connection: null
+- View: CogniteActivity
+  View Property: sourceUpdatedTime
+  Description: When the instance was last updated in the source system (if available)
+  Value Type: timestamp
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceUpdatedTime
+  Container Property Name: Source last updated
+  Container Property Description: When the instance was last updated in the source
+    system (if available)
+  Index: btree:sourceUpdatedTime(bySpace=False,cursorable=True)
+  Connection: null
+- View: CogniteActivity
+  View Property: sourceCreatedUser
+  Description: User identifier from the source system on who created the source data.
+    This identifier is not guaranteed to match the user identifiers in CDF
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceCreatedUser
+  Container Property Name: Source created by
+  Container Property Description: User identifier from the source system on who created
+    the source data. This identifier is not guaranteed to match user identifiers in
+    CDF
+  Connection: null
+- View: CogniteActivity
+  View Property: sourceUpdatedUser
+  Description: User identifier from the source system on who last updated the source
+    data. This identifier is not guaranteed to match the user identifiers in CDF
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceUpdatedUser
+  Container Property Name: Source last updated by
+  Container Property Description: User identifier from the source system on who last
+    updated the source data. This identifier is not guaranteed to match user identifiers
+    in CDF
+  Connection: null
+- View: CogniteActivity
+  View Property: startTime
+  Description: The actual start time of an activity (or similar that extends this)
+  Value Type: timestamp
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSchedulable
+  Container Property: startTime
+  Container Property Name: Start time
+  Container Property Description: The actual start time of an activity (or similar
+    that extends this)
+  Index: btree:startTime(bySpace=False,cursorable=True)
+  Connection: null
+- View: CogniteActivity
+  View Property: endTime
+  Description: The actual end time of an activity (or similar that extends this)
+  Value Type: timestamp
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSchedulable
+  Container Property: endTime
+  Container Property Name: End time
+  Container Property Description: The actual end time of an activity (or similar that
+    extends this)
+  Index: btree:endTime(bySpace=False,cursorable=True)
+  Connection: null
+- View: CogniteActivity
+  View Property: scheduledStartTime
+  Description: The planned start time of an activity (or similar that extends this)
+  Value Type: timestamp
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSchedulable
+  Container Property: scheduledStartTime
+  Container Property Name: Scheduled start time
+  Container Property Description: The planned start time of an activity (or similar
+    that extends this)
+  Index: btree:scheduledStartTime(bySpace=False,cursorable=True)
+  Connection: null
+- View: CogniteActivity
+  View Property: scheduledEndTime
+  Description: The planned end time of an activity (or similar that extends this)
+  Value Type: timestamp
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSchedulable
+  Container Property: scheduledEndTime
+  Container Property Name: Scheduled end time
+  Container Property Description: The planned end time of an activity (or similar
+    that extends this)
+  Index: btree:scheduledEndTime(bySpace=False,cursorable=True)
+  Connection: null
+- View: CogniteActivity
+  View Property: assets
+  Name: Assets
+  Description: A list of assets the activity is related to.
+  Connection: direct
+  Value Type: CogniteAsset
+  Min Count: 0
+  Max Count: 1200
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteActivity
+  Container Property: assets
+  Container Property Description: List of assets this activity relates to/has been
+    contextualized to
+- View: CogniteActivity
+  View Property: equipment
+  Name: Equipment
+  Description: A list of equipment the activity is related to.
+  Connection: direct
+  Value Type: CogniteEquipment
+  Min Count: 0
+  Max Count: 100
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteActivity
+  Container Property: equipment
+  Container Property Description: The list of equipment this activity relates to
+- View: CogniteActivity
+  View Property: timeSeries
+  Name: Time series
+  Description: A list of time series the activity is related to.
+  Connection: direct
+  Value Type: CogniteTimeSeries
+  Min Count: 0
+  Max Count: 100
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteActivity
+  Container Property: timeSeries
+  Container Property Description: The list of time series this activity relates to
+- View: CogniteTimeSeries
+  View Property: name
+  Description: Name of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: name
+  Container Property Name: Name
+  Container Property Description: Holds a name of the instance where that is applicable
+  Index: btree:name(bySpace=False,cursorable=False)
+  Connection: null
+- View: CogniteTimeSeries
+  View Property: description
+  Description: Description of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: description
+  Container Property Name: Description
+  Container Property Description: Holds a description of the instance
+  Connection: null
+- View: CogniteTimeSeries
+  View Property: tags
+  Description: Text based labels for generic use, limited to 1000
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: tags
+  Container Property Name: Tags
+  Container Property Description: Instance tags (limited to 1000 tags)
+  Connection: null
+- View: CogniteTimeSeries
+  View Property: aliases
+  Description: Alternative names for the node
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: aliases
+  Container Property Name: Aliases
+  Container Property Description: Alternative names (aliases)
+  Connection: null
+- View: CogniteTimeSeries
+  View Property: sourceId
+  Description: Identifier from the source system
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceId
+  Container Property Name: Source ID
+  Container Property Description: Identifier in the source system
+  Index: btree:sourceId(bySpace=False,cursorable=True)
+  Connection: null
+- View: CogniteTimeSeries
+  View Property: sourceContext
+  Description: Context of the source id. For systems where the sourceId is globally
+    unique, the sourceContext is expected to not be set.
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceContext
+  Container Property Name: Source context
+  Container Property Description: Context of the source id. For systems where the
+    sourceId is globally unique, the sourceContext is expected to not be set.
+  Connection: null
+- View: CogniteTimeSeries
+  View Property: source
+  Description: Direct relation to a source system
+  Connection: direct(container=CogniteSourceSystem)
+  Value Type: CogniteSourceSystem
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: source
+  Container Property Name: Source
+  Container Property Description: Direct relation to source system instance
+  Index: btree:source(bySpace=False,cursorable=False)
+- View: CogniteTimeSeries
+  View Property: sourceCreatedTime
+  Description: When the instance was created in source system (if available)
+  Value Type: timestamp
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceCreatedTime
+  Container Property Name: Source created
+  Container Property Description: When the instance was created in source system (if
+    available)
+  Index: btree:sourceCreatedTime(bySpace=False,cursorable=False)
+  Connection: null
+- View: CogniteTimeSeries
+  View Property: sourceUpdatedTime
+  Description: When the instance was last updated in the source system (if available)
+  Value Type: timestamp
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceUpdatedTime
+  Container Property Name: Source last updated
+  Container Property Description: When the instance was last updated in the source
+    system (if available)
+  Index: btree:sourceUpdatedTime(bySpace=False,cursorable=True)
+  Connection: null
+- View: CogniteTimeSeries
+  View Property: sourceCreatedUser
+  Description: User identifier from the source system on who created the source data.
+    This identifier is not guaranteed to match the user identifiers in CDF
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceCreatedUser
+  Container Property Name: Source created by
+  Container Property Description: User identifier from the source system on who created
+    the source data. This identifier is not guaranteed to match user identifiers in
+    CDF
+  Connection: null
+- View: CogniteTimeSeries
+  View Property: sourceUpdatedUser
+  Description: User identifier from the source system on who last updated the source
+    data. This identifier is not guaranteed to match the user identifiers in CDF
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceUpdatedUser
+  Container Property Name: Source last updated by
+  Container Property Description: User identifier from the source system on who last
+    updated the source data. This identifier is not guaranteed to match user identifiers
+    in CDF
+  Connection: null
+- View: CogniteTimeSeries
+  View Property: isStep
+  Name: Is step
+  Description: Specifies whether the time series is a step time series or not.
+  Value Type: boolean
+  Min Count: 1
+  Max Count: 1
+  Immutable: false
+  Default: false
+  Auto Increment: false
+  Container: CogniteTimeSeries
+  Container Property: isStep
+  Connection: null
+- View: CogniteTimeSeries
+  View Property: type
+  Name: Type
+  Description: Specifies the data type of the data points.
+  Value Type: enum(collection=CogniteTimeSeries.type)
+  Min Count: 1
+  Max Count: 1
+  Immutable: true
+  Auto Increment: false
+  Container: CogniteTimeSeries
+  Container Property: type
+  Connection: null
+- View: CogniteTimeSeries
+  View Property: sourceUnit
+  Name: Source unit
+  Description: The unit specified in the source system.
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteTimeSeries
+  Container Property: sourceUnit
+  Container Property Description: Unit as specified in the source system
+  Connection: null
+- View: CogniteTimeSeries
+  View Property: unit
+  Name: Unit
+  Description: The unit of the time series.
+  Connection: direct(container=CogniteUnit)
+  Value Type: CogniteUnit
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteTimeSeries
+  Container Property: unit
+  Container Property Description: Unit of the time series
+- View: CogniteTimeSeries
+  View Property: assets
+  Name: Assets
+  Description: A list of assets the time series is related to.
+  Connection: direct
+  Value Type: CogniteAsset
+  Min Count: 0
+  Max Count: 1200
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteTimeSeries
+  Container Property: assets
+  Container Property Description: List of assets this time series is related to/contextualized
+    to
+- View: CogniteTimeSeries
+  View Property: equipment
+  Name: Equipment
+  Description: A list of equipment the time series is related to.
+  Connection: direct
+  Value Type: CogniteEquipment
+  Min Count: 0
+  Max Count: 100
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteTimeSeries
+  Container Property: equipment
+  Container Property Description: List of equipment that related to this time series.
+- View: CogniteTimeSeries
+  View Property: stateSet
+  Name: State set
+  Description: The state set of the time series. It is only in effect when the type
+    is 'state'.
+  Connection: direct(container=CogniteStateSet)
+  Value Type: '#N/A'
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteTimeSeries
+  Container Property: stateSet
+  Index: btree:stateSet(bySpace=False,cursorable=True)
+- View: CogniteTimeSeries
+  View Property: activities
+  Name: Activities
+  Description: An automatically updated list of activities the time series is related
+    to.
+  Connection: reverse(property=timeSeries)
+  Value Type: CogniteActivity
+  Min Count: 0
+  Max Count: null
+- View: CogniteAnnotation
+  View Property: name
+  Description: Name of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: name
+  Container Property Name: Name
+  Container Property Description: Holds a name of the instance where that is applicable
+  Index: btree:name(bySpace=False,cursorable=False)
+  Connection: null
+- View: CogniteAnnotation
+  View Property: description
+  Description: Description of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: description
+  Container Property Name: Description
+  Container Property Description: Holds a description of the instance
+  Connection: null
+- View: CogniteAnnotation
+  View Property: tags
+  Description: Text based labels for generic use, limited to 1000
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: tags
+  Container Property Name: Tags
+  Container Property Description: Instance tags (limited to 1000 tags)
+  Connection: null
+- View: CogniteAnnotation
+  View Property: aliases
+  Description: Alternative names for the node
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: aliases
+  Container Property Name: Aliases
+  Container Property Description: Alternative names (aliases)
+  Connection: null
+- View: CogniteAnnotation
+  View Property: sourceId
+  Description: Identifier from the source system
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceId
+  Container Property Name: Source ID
+  Container Property Description: Identifier in the source system
+  Index: btree:sourceId(bySpace=False,cursorable=True)
+  Connection: null
+- View: CogniteAnnotation
+  View Property: sourceContext
+  Description: Context of the source id. For systems where the sourceId is globally
+    unique, the sourceContext is expected to not be set.
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceContext
+  Container Property Name: Source context
+  Container Property Description: Context of the source id. For systems where the
+    sourceId is globally unique, the sourceContext is expected to not be set.
+  Connection: null
+- View: CogniteAnnotation
+  View Property: source
+  Description: Direct relation to a source system
+  Connection: direct(container=CogniteSourceSystem)
+  Value Type: CogniteSourceSystem
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: source
+  Container Property Name: Source
+  Container Property Description: Direct relation to source system instance
+  Index: btree:source(bySpace=False,cursorable=False)
+- View: CogniteAnnotation
+  View Property: sourceCreatedTime
+  Description: When the instance was created in source system (if available)
+  Value Type: timestamp
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceCreatedTime
+  Container Property Name: Source created
+  Container Property Description: When the instance was created in source system (if
+    available)
+  Index: btree:sourceCreatedTime(bySpace=False,cursorable=False)
+  Connection: null
+- View: CogniteAnnotation
+  View Property: sourceUpdatedTime
+  Description: When the instance was last updated in the source system (if available)
+  Value Type: timestamp
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceUpdatedTime
+  Container Property Name: Source last updated
+  Container Property Description: When the instance was last updated in the source
+    system (if available)
+  Index: btree:sourceUpdatedTime(bySpace=False,cursorable=True)
+  Connection: null
+- View: CogniteAnnotation
+  View Property: sourceCreatedUser
+  Description: User identifier from the source system on who created the source data.
+    This identifier is not guaranteed to match the user identifiers in CDF
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceCreatedUser
+  Container Property Name: Source created by
+  Container Property Description: User identifier from the source system on who created
+    the source data. This identifier is not guaranteed to match user identifiers in
+    CDF
+  Connection: null
+- View: CogniteAnnotation
+  View Property: sourceUpdatedUser
+  Description: User identifier from the source system on who last updated the source
+    data. This identifier is not guaranteed to match the user identifiers in CDF
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceUpdatedUser
+  Container Property Name: Source last updated by
+  Container Property Description: User identifier from the source system on who last
+    updated the source data. This identifier is not guaranteed to match user identifiers
+    in CDF
+  Connection: null
+- View: CogniteAnnotation
+  View Property: confidence
+  Description: The confidence that the annotation is a good match
+  Value Type: float64
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteAnnotation
+  Container Property: confidence
+  Container Property Description: The confidence that the annotation is a good match
+  Connection: null
+- View: CogniteAnnotation
+  View Property: status
+  Description: The status of the annotation
+  Value Type: enum(collection=CogniteAnnotation.status)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteAnnotation
+  Container Property: status
+  Container Property Description: The status of the annotation
+  Connection: null
+- View: CogniteDiagramAnnotation
+  View Property: name
+  Description: Name of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: name
+  Container Property Name: Name
+  Container Property Description: Holds a name of the instance where that is applicable
+  Index: btree:name(bySpace=False,cursorable=False)
+  Connection: null
+- View: CogniteDiagramAnnotation
+  View Property: description
+  Description: Description of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: description
+  Container Property Name: Description
+  Container Property Description: Holds a description of the instance
+  Connection: null
+- View: CogniteDiagramAnnotation
+  View Property: tags
+  Description: Text based labels for generic use, limited to 1000
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: tags
+  Container Property Name: Tags
+  Container Property Description: Instance tags (limited to 1000 tags)
+  Connection: null
+- View: CogniteDiagramAnnotation
+  View Property: aliases
+  Description: Alternative names for the node
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: aliases
+  Container Property Name: Aliases
+  Container Property Description: Alternative names (aliases)
+  Connection: null
+- View: CogniteDiagramAnnotation
+  View Property: sourceId
+  Description: Identifier from the source system
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceId
+  Container Property Name: Source ID
+  Container Property Description: Identifier in the source system
+  Index: btree:sourceId(bySpace=False,cursorable=True)
+  Connection: null
+- View: CogniteDiagramAnnotation
+  View Property: sourceContext
+  Description: Context of the source id. For systems where the sourceId is globally
+    unique, the sourceContext is expected to not be set.
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceContext
+  Container Property Name: Source context
+  Container Property Description: Context of the source id. For systems where the
+    sourceId is globally unique, the sourceContext is expected to not be set.
+  Connection: null
+- View: CogniteDiagramAnnotation
+  View Property: source
+  Description: Direct relation to a source system
+  Connection: direct(container=CogniteSourceSystem)
+  Value Type: CogniteSourceSystem
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: source
+  Container Property Name: Source
+  Container Property Description: Direct relation to source system instance
+  Index: btree:source(bySpace=False,cursorable=False)
+- View: CogniteDiagramAnnotation
+  View Property: sourceCreatedTime
+  Description: When the instance was created in source system (if available)
+  Value Type: timestamp
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceCreatedTime
+  Container Property Name: Source created
+  Container Property Description: When the instance was created in source system (if
+    available)
+  Index: btree:sourceCreatedTime(bySpace=False,cursorable=False)
+  Connection: null
+- View: CogniteDiagramAnnotation
+  View Property: sourceUpdatedTime
+  Description: When the instance was last updated in the source system (if available)
+  Value Type: timestamp
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceUpdatedTime
+  Container Property Name: Source last updated
+  Container Property Description: When the instance was last updated in the source
+    system (if available)
+  Index: btree:sourceUpdatedTime(bySpace=False,cursorable=True)
+  Connection: null
+- View: CogniteDiagramAnnotation
+  View Property: sourceCreatedUser
+  Description: User identifier from the source system on who created the source data.
+    This identifier is not guaranteed to match the user identifiers in CDF
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceCreatedUser
+  Container Property Name: Source created by
+  Container Property Description: User identifier from the source system on who created
+    the source data. This identifier is not guaranteed to match user identifiers in
+    CDF
+  Connection: null
+- View: CogniteDiagramAnnotation
+  View Property: sourceUpdatedUser
+  Description: User identifier from the source system on who last updated the source
+    data. This identifier is not guaranteed to match the user identifiers in CDF
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteSourceable
+  Container Property: sourceUpdatedUser
+  Container Property Name: Source last updated by
+  Container Property Description: User identifier from the source system on who last
+    updated the source data. This identifier is not guaranteed to match user identifiers
+    in CDF
+  Connection: null
+- View: CogniteDiagramAnnotation
+  View Property: confidence
+  Description: The confidence that the annotation is a good match
+  Value Type: float64
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteAnnotation
+  Container Property: confidence
+  Container Property Description: The confidence that the annotation is a good match
+  Connection: null
+- View: CogniteDiagramAnnotation
+  View Property: status
+  Description: The status of the annotation
+  Value Type: enum(collection=CogniteAnnotation.status)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteAnnotation
+  Container Property: status
+  Container Property Description: The status of the annotation
+  Connection: null
+- View: CogniteDiagramAnnotation
+  View Property: startNodePageNumber
+  Description: 'The number of the page on which this annotation is located in `startNode`
+    File. The first page has number 1
+
+    '
+  Value Type: int64
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDiagramAnnotation
+  Container Property: startNodePageNumber
+  Container Property Description: 'The number of the page on which this annotation
+    is located in `startNode` File. The first page has number 1
+
+    '
+  Connection: null
+- View: CogniteDiagramAnnotation
+  View Property: endNodePageNumber
+  Description: 'The number of the page on which this annotation is located in the
+    endNode File if an endNode is present. The first page has number 1
+
+    '
+  Value Type: int64
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDiagramAnnotation
+  Container Property: endNodePageNumber
+  Container Property Description: 'The number of the page on which this annotation
+    is located in the endNode File if an endNode is present. The first page has number
+    1
+
+    '
+  Connection: null
+- View: CogniteDiagramAnnotation
+  View Property: startNodeXMin
+  Description: 'Value between [0,1]. Minimum abscissa of the bounding box (left edge).
+    Must be strictly less than startNodeXMax
+
+    '
+  Value Type: float64
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDiagramAnnotation
+  Container Property: startNodeXMin
+  Container Property Description: 'Value between [0,1]. Minimum abscissa of the bounding
+    box (left edge). Must be strictly less than startNodeXMax
+
+    '
+  Connection: null
+- View: CogniteDiagramAnnotation
+  View Property: startNodeXMax
+  Description: 'Value between [0,1]. Maximum abscissa of the bounding box (right edge).
+    Must be strictly more than startNodeXMin
+
+    '
+  Value Type: float64
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDiagramAnnotation
+  Container Property: startNodeXMax
+  Container Property Description: 'Value between [0,1]. Maximum abscissa of the bounding
+    box (right edge). Must be strictly more than startNodeXMin
+
+    '
+  Connection: null
+- View: CogniteDiagramAnnotation
+  View Property: startNodeYMin
+  Description: 'Value between [0,1]. Minimum ordinate of the bounding box (bottom
+    edge). Must be strictly less than startNodeYMax
+
+    '
+  Value Type: float64
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDiagramAnnotation
+  Container Property: startNodeYMin
+  Container Property Description: 'Value between [0,1]. Minimum ordinate of the bounding
+    box (bottom edge). Must be strictly less than startNodeYMax
+
+    '
+  Connection: null
+- View: CogniteDiagramAnnotation
+  View Property: startNodeYMax
+  Description: 'Value between [0,1]. Maximum ordinate of the bounding box (top edge).
+    Must be strictly more than startNodeYMin
+
+    '
+  Value Type: float64
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDiagramAnnotation
+  Container Property: startNodeYMax
+  Container Property Description: 'Value between [0,1]. Maximum ordinate of the bounding
+    box (top edge). Must be strictly more than startNodeYMin
+
+    '
+  Connection: null
+- View: CogniteDiagramAnnotation
+  View Property: startNodeText
+  Description: The text extracted from within the bounding box on the startNode
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDiagramAnnotation
+  Container Property: startNodeText
+  Container Property Description: The text extracted from within the bounding box
+    on the startNode
+  Connection: null
+- View: CogniteDiagramAnnotation
+  View Property: endNodeXMin
+  Description: 'Value between [0,1]. Minimum abscissa of the bounding box (left edge).
+    Must be strictly less than endNodeXMax. Only applicable if an endNode is defined
+
+    '
+  Value Type: float64
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDiagramAnnotation
+  Container Property: endNodeXMin
+  Container Property Description: 'Value between [0,1]. Minimum abscissa of the bounding
+    box (left edge). Must be strictly less than endNodeXMax. Only applicable if an
+    endNode is defined
+
+    '
+  Connection: null
+- View: CogniteDiagramAnnotation
+  View Property: endNodeXMax
+  Description: 'Value between [0,1]. Maximum abscissa of the bounding box (right edge).
+    Must be strictly more than endNodeXMin. Only applicable if an endNode is defined
+
+    '
+  Value Type: float64
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDiagramAnnotation
+  Container Property: endNodeXMax
+  Container Property Description: 'Value between [0,1]. Maximum abscissa of the bounding
+    box (right edge). Must be strictly more than endNodeXMin. Only applicable if an
+    endNode is defined
+
+    '
+  Connection: null
+- View: CogniteDiagramAnnotation
+  View Property: endNodeYMin
+  Description: 'Value between [0,1]. Minimum ordinate of the bounding box (bottom
+    edge). Must be strictly less than endNodeYMax. Only applicable if an endNode is
+    defined
+
+    '
+  Value Type: float64
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDiagramAnnotation
+  Container Property: endNodeYMin
+  Container Property Description: 'Value between [0,1]. Minimum ordinate of the bounding
+    box (bottom edge). Must be strictly less than endNodeYMax. Only applicable if
+    an endNode is defined
+
+    '
+  Connection: null
+- View: CogniteDiagramAnnotation
+  View Property: endNodeYMax
+  Description: 'Value between [0,1]. Maximum ordinate of the bounding box (top edge).
+    Must be strictly more than endNodeYMin. Only applicable if an endNode is defined
+
+    '
+  Value Type: float64
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDiagramAnnotation
+  Container Property: endNodeYMax
+  Container Property Description: 'Value between [0,1]. Maximum ordinate of the bounding
+    box (top edge). Must be strictly more than endNodeYMin. Only applicable if an
+    endNode is defined
+
+    '
+  Connection: null
+- View: CogniteDiagramAnnotation
+  View Property: endNodeText
+  Description: 'The text extracted from within the bounding box on the endNode. Only
+    applicable if an endNode is defined
+
+    '
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDiagramAnnotation
+  Container Property: endNodeText
+  Container Property Description: 'The text extracted from within the bounding box
+    on the endNode. Only applicable if an endNode is defined
+
+    '
+  Connection: null
+- View: CogniteUnit
+  View Property: name
+  Description: Name of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: name
+  Container Property Name: Name
+  Container Property Description: Holds a name of the instance where that is applicable
+  Index: btree:name(bySpace=False,cursorable=False)
+  Connection: null
+- View: CogniteUnit
+  View Property: description
+  Description: Description of the instance
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: description
+  Container Property Name: Description
+  Container Property Description: Holds a description of the instance
+  Connection: null
+- View: CogniteUnit
+  View Property: tags
+  Description: Text based labels for generic use, limited to 1000
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: tags
+  Container Property Name: Tags
+  Container Property Description: Instance tags (limited to 1000 tags)
+  Connection: null
+- View: CogniteUnit
+  View Property: aliases
+  Description: Alternative names for the node
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1000
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteDescribable
+  Container Property: aliases
+  Container Property Name: Aliases
+  Container Property Description: Alternative names (aliases)
+  Connection: null
+- View: CogniteUnit
+  View Property: symbol
+  Description: The symbol for the unit of measurement
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteUnit
+  Container Property: symbol
+  Container Property Description: The symbol for the unit of measurement
+  Connection: null
+- View: CogniteUnit
+  View Property: quantity
+  Description: Specifies the physical quantity the unit measures
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteUnit
+  Container Property: quantity
+  Container Property Description: Specifies the physical quantity the unit measures
+  Connection: null
+- View: CogniteUnit
+  View Property: source
+  Description: Source of the unit definition
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteUnit
+  Container Property: source
+  Container Property Description: Source of the unit definition
+  Connection: null
+- View: CogniteUnit
+  View Property: sourceReference
+  Description: Reference to the source of the unit definition
+  Value Type: text(collation=ucs_basic)
+  Min Count: 0
+  Max Count: 1
+  Immutable: false
+  Auto Increment: false
+  Container: CogniteUnit
+  Container Property: sourceReference
+  Container Property Description: Reference to the source of the unit definition
+  Connection: null
+Views:
+- View: CogniteDescribable
+  Description: 'The describable core concept is used as a standard way of holding
+    the bare minimum of information about the instance
+
+    '
+- View: CogniteSourceable
+- View: CogniteSourceSystem
+  Description: The CogniteSourceSystem core concept is used to standardize the way
+    source system is stored.
+  Implements: CogniteDescribable
+- View: CogniteSchedulable
+  Description: CogniteSchedulable represents the metadata about when an activity (or
+    similar) starts and ends.
+- View: CogniteVisualizable
+  Description: CogniteVisualizable defines the standard way to reference a related
+    3D resource
+- View: Cognite3DTransformation
+  Description: 'The Cognite3DTransformation object defines a comprehensive 3D transformation,
+    enabling precise adjustments to an object''s position, orientation, and size in
+    the 3D coordinate system. It allows for the translation of objects along the three
+    spatial axes, rotation around these axes using Euler angles, and scaling along
+    each axis to modify the object''s dimensions. The object''s transformation is
+    defined in "CDF space", a coordinate system where the positive Z axis is the up
+    direction
+
+    '
+- View: CogniteCubeMap
+  Description: 'The cube map holds references to 6 images in used to visually represent
+    the surrounding environment
+
+    '
+- View: Cognite3DObject
+  Description: This is the virtual position representation of an object in the physical
+    world, connecting an asset to one or more 3D resources
+  Implements: CogniteDescribable
+- View: Cognite3DModel
+  Description: Groups revisions of 3D data of various kinds together (CAD, PointCloud,
+    Image360)
+  Implements: CogniteDescribable
+- View: CogniteCADModel
+  Description: Navigational aid for traversing CogniteCADModel instances
+  Implements: CogniteDescribable,Cognite3DModel
+  Filter: rawFilter({"and":[{"hasData":[{"space":"cdf_cdm_3d","externalId":"Cognite3DModel","type":"container"}]},{"equals":{"property":["cdf_cdm_3d","Cognite3DModel","type"],"value":"CAD"}}]})
+- View: Cognite3DRevision
+  Description: 'Shared revision information for various 3D data types. Normally not
+    used directly, but through CognitePointCloudRevision, Image360Collection or CogniteCADRevision
+
+    '
+- View: CognitePointCloudModel
+  Description: Navigational aid for traversing CognitePointCloudModel instances
+  Implements: CogniteDescribable,Cognite3DModel
+  Filter: rawFilter({"and":[{"hasData":[{"space":"cdf_cdm_3d","externalId":"Cognite3DModel","type":"container"}]},{"equals":{"property":["cdf_cdm_3d","Cognite3DModel","type"],"value":"PointCloud"}}]})
+- View: Cognite360ImageModel
+  Description: Navigational aid for traversing Cognite360ImageModel instances
+  Implements: CogniteDescribable,Cognite3DModel
+  Filter: rawFilter({"and":[{"hasData":[{"space":"cdf_cdm_3d","externalId":"Cognite3DModel","type":"container"}]},{"equals":{"property":["cdf_cdm_3d","Cognite3DModel","type"],"value":"Image360"}}]})
+- View: CogniteCADRevision
+  Description: ''
+  Implements: Cognite3DRevision
+  Filter: rawFilter({"and":[{"hasData":[{"space":"cdf_cdm_3d","externalId":"Cognite3DRevision","type":"container"}]},{"equals":{"property":["cdf_cdm_3d","Cognite3DModel","type"],"value":"CAD"}}]})
+- View: CognitePointCloudRevision
+  Description: Navigational aid for traversing CognitePointCloudRevision instances
+  Implements: Cognite3DRevision
+  Filter: rawFilter({"and":[{"hasData":[{"space":"cdf_cdm_3d","externalId":"Cognite3DRevision","type":"container"}]},{"equals":{"property":["cdf_cdm_3d","Cognite3DModel","type"],"value":"PointCloud"}}]})
+- View: Cognite360ImageCollection
+  Description: Represents a logical collection of Cognite360Image instances
+  Implements: CogniteDescribable,Cognite3DRevision
+  Filter: rawFilter({"and":[{"hasData":[{"space":"cdf_cdm_3d","externalId":"Cognite3DRevision","type":"container"}]},{"equals":{"property":["cdf_cdm_3d","Cognite3DModel","type"],"value":"Image360"}}]})
+- View: CogniteCADNode
+  Description: Represents nodes from the 3D model that have been contextualized
+  Implements: CogniteDescribable
+- View: CognitePointCloudVolume
+  Description: PointCloud volume definition
+  Implements: CogniteDescribable
+- View: Cognite360Image
+  Description: ''
+  Implements: Cognite3DTransformation,CogniteCubeMap
+- View: Cognite360ImageStation
+  Description: A way to group images across collections. Used for creating visual
+    scan history
+  Implements: CogniteDescribable
+  Filter: rawFilter({"and":[{"hasData":[{"space":"cdf_cdm_3d","externalId":"Cognite3DGroup","type":"container"}]},{"equals":{"property":["cdf_cdm_3d","Cognite3DGroup","groupType"],"value":"Station360"}}]})
+- View: Cognite360ImageAnnotation
+  Description: ''
+  Implements: CogniteDescribable,CogniteSourceable,CogniteAnnotation
+- View: CogniteAsset
+  Name: Asset
+  Description: Assets represent systems that support industrial functions or processes.
+    Assets are often called 'functional location'.
+  Implements: CogniteVisualizable,CogniteDescribable,CogniteSourceable
+- View: CogniteAssetClass
+  Name: Asset class
+  Description: Represents the class of an asset.
+  Implements: CogniteDescribable
+- View: CogniteAssetType
+  Name: Asset type
+  Description: Represents the type of an asset.
+  Implements: CogniteDescribable
+- View: CogniteEquipment
+  Name: Equipment
+  Description: Equipment represents physical supplies or devices.
+  Implements: CogniteDescribable,CogniteSourceable
+- View: CogniteEquipmentType
+  Name: Equipment type
+  Description: Represents the type of equipment.
+  Implements: CogniteDescribable
+- View: CogniteFile
+  Name: File
+  Description: Represents files.
+  Implements: CogniteDescribable,CogniteSourceable
+- View: CogniteFileCategory
+  Name: File category
+  Description: Represents the categories of files as determined by contextualization
+    or categorization.
+  Implements: CogniteDescribable
+- View: CogniteActivity
+  Name: Activity
+  Description: Represents activities. Activities typically happen over a period and
+    have a start and end time.
+  Implements: CogniteDescribable,CogniteSourceable,CogniteSchedulable
+- View: CogniteTimeSeries
+  Name: Time series
+  Description: Represents a series of data points in time order.
+  Implements: CogniteDescribable,CogniteSourceable
+- View: CogniteAnnotation
+  Description: Annotation represents contextualization results or links
+  Implements: CogniteDescribable,CogniteSourceable
+- View: CogniteDiagramAnnotation
+  Description: Annotation for diagrams
+  Implements: CogniteDescribable,CogniteSourceable,CogniteAnnotation
+- View: CogniteUnit
+  Description: Represents a single unit of measurement
+  Implements: CogniteDescribable
+Containers:
+- Container: CogniteSourceable
+  Description: The CogniteSourceable core concept is used to standardize the way source
+    information is stored.
+  Used For: all
+- Container: CogniteTimeSeries
+  Constraint: requires:describablePresent(require=CogniteDescribable),requires:sourceablePresent(require=CogniteSourceable)
+  Used For: node
+- Container: CogniteSourceSystem
+  Description: The CogniteSourceSystem core concept is used to standardize the way
+    source system is stored.
+  Used For: node
+- Container: cdf_cdm_3d:Cognite3DModel
+  Used For: node
+- Container: cdf_cdm_3d:CognitePointCloudRevision
+  Used For: node
+- Container: cdf_cdm_3d:CogniteCADNode
+  Used For: node
+- Container: cdf_cdm_3d:CogniteCADRevision
+  Used For: node
+- Container: cdf_cdm_3d:CogniteCubeMap
+  Used For: node
+- Container: cdf_cdm_3d:Cognite3DRevision
+  Used For: node
+- Container: CogniteAnnotation
+  Description: Annotation represents contextualization results or links
+  Constraint: requires:describablePresent(require=CogniteDescribable),requires:sourceablePresent(require=CogniteSourceable)
+  Used For: edge
+- Container: CogniteAssetType
+  Description: This identifies the type of an asset
+  Constraint: requires:describablePresent(require=CogniteDescribable)
+  Used For: node
+- Container: CogniteFileCategory
+  Description: Specifies the category for a file (as a result of categorization/classification))
+  Constraint: requires:describablePresent(require=CogniteDescribable)
+  Used For: node
+- Container: CogniteAssetClass
+  Description: This identifies the class of an asset
+  Constraint: requires:describablePresent(require=CogniteDescribable)
+  Used For: node
+- Container: CogniteEquipmentType
+  Description: This identifies the type of an equipment
+  Constraint: requires:describablePresent(require=CogniteDescribable)
+  Used For: node
+- Container: cdf_cdm_3d:Cognite360Image
+  Used For: node
+- Container: cdf_cdm_3d:Cognite360ImageAnnotation
+  Used For: edge
+- Container: CogniteEquipment
+  Description: Represent a physical piece of equipment
+  Constraint: requires:describablePresent(require=CogniteDescribable),requires:sourceablePresent(require=CogniteSourceable)
+  Used For: node
+- Container: CogniteSchedulable
+  Description: CogniteSchedulable represents the metadata about when an activity (or
+    similar) starts and ends
+  Used For: node
+- Container: cdf_cdm_3d:Cognite3DObject
+  Used For: node
+- Container: CogniteFile
+  Description: This concept models the underlying file from the Files resource type
+  Constraint: requires:describablePresent(require=CogniteDescribable),requires:sourceablePresent(require=CogniteSourceable)
+  Used For: node
+- Container: CogniteDiagramAnnotation
+  Constraint: requires:describablePresent(require=CogniteDescribable),requires:sourceablePresent(require=CogniteSourceable),requires:annotationPresent(require=CogniteAnnotation)
+  Used For: edge
+- Container: CogniteActivity
+  Description: Represent an activity
+  Constraint: requires:describablePresent(require=CogniteDescribable),requires:sourceablePresent(require=CogniteSourceable),requires:schedulablePresent(require=CogniteSchedulable)
+  Used For: node
+- Container: cdf_cdm_3d:CognitePointCloudVolume
+  Used For: node
+- Container: cdf_cdm_3d:Cognite3DTransformation
+  Used For: all
+- Container: CogniteVisualizable
+  Description: CogniteVisualizable defines the standard way to reference a related
+    3D resource
+  Used For: node
+- Container: CogniteUnit
+  Description: Represents a single unit of measurement
+  Constraint: requires:describablePresent(require=CogniteDescribable)
+  Used For: node
+- Container: CogniteAsset
+  Description: The asset is the bare bone representation of assets in our asset centric
+    world
+  Constraint: requires:describablePresent(require=CogniteDescribable),requires:visualizablePresent(require=CogniteVisualizable),requires:sourceablePresent(require=CogniteSourceable)
+  Used For: node
+- Container: CogniteDescribable
+  Description: The describable core concept is used as a standard way of holding the
+    bare minimum of information about the instance.
+  Used For: all
+- Container: cdf_cdm_3d:Cognite3DGroup
+  Used For: node
+Enum:
+- Collection: CogniteTimeSeries.type
+  Value: string
+  Name: string
+  Description: Time series with string data points.
+- Collection: CogniteTimeSeries.type
+  Value: numeric
+  Name: numeric
+  Description: Time series with double floating point data points.
+- Collection: CogniteTimeSeries.type
+  Value: state
+  Name: state
+  Description: Time series with state data points.
+- Collection: Cognite3DModel.type
+  Value: CAD
+  Name: CAD
+- Collection: Cognite3DModel.type
+  Value: PointCloud
+  Name: PointCloud
+- Collection: Cognite3DModel.type
+  Value: Image360
+  Name: Image360
+- Collection: Cognite3DRevision.type
+  Value: CAD
+  Name: CAD
+- Collection: Cognite3DRevision.type
+  Value: PointCloud
+  Name: PointCloud
+- Collection: Cognite3DRevision.type
+  Value: Image360
+  Name: Image360
+- Collection: Cognite3DRevision.status
+  Value: Queued
+  Name: Queued
+- Collection: Cognite3DRevision.status
+  Value: Processing
+  Name: Processing
+- Collection: Cognite3DRevision.status
+  Value: Done
+  Name: Done
+- Collection: Cognite3DRevision.status
+  Value: Failed
+  Name: Failed
+- Collection: CogniteAnnotation.status
+  Value: Suggested
+  Name: Suggested
+- Collection: CogniteAnnotation.status
+  Value: Approved
+  Name: Approved
+- Collection: CogniteAnnotation.status
+  Value: Rejected
+  Name: Rejected
+- Collection: CognitePointCloudVolume.volumeType
+  Value: Cylinder
+  Name: Cylinder
+- Collection: CognitePointCloudVolume.volumeType
+  Value: Box
+  Name: Box
+- Collection: Cognite3DGroup.groupType
+  Value: Station360
+  Name: Station360
+Nodes:
+- Node: image-360-annotation
