@@ -189,17 +189,6 @@ folder and reinstalling with `pip install -e .`
 un_generation().
 5. All temporary files are deleted.
 
-### attach_plugin() path (legacy / session-aware helper)
-
-1. ttach_plugin(neat_session) monkey-patches rowse_model() onto
-
-eat.physical_data_model.write, capturing the session in a closure so
-   CDM and IDM can be fetched live from CDF using the same credentials.
-2. rowse_model() exports the loaded model to a temporary YAML and calls
-
-un_generation() with both YAML paths.
-3. All temporary files are deleted.
-
 ### Script resolution order for generate_documentation_v7.py
 
 1. script_path= argument
