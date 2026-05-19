@@ -14,6 +14,7 @@ from ._writer import (
     _BUNDLED_IDM,
     _fetch_cdm_yaml,
     _fetch_idm_yaml,
+    _fetch_ref_yaml,
     _find_gen_script,
     _import_run_generation,
 )
@@ -33,12 +34,20 @@ class HtmlDocExporter(DMSFileExporter):
         Explicit path to CogniteCore.yaml. Bundled fallback used when omitted.
     idm : str or Path or None
         Explicit path to CogniteProcessIndustries.yaml. Same fallback logic.
+    ref_paths : list[str or Path] or None
+        Explicit YAML paths for additional reference models declared in the
+        model's ``governedSpaces`` metadata field.  Auto-discovery and CDF
+        fetching handle spaces not covered by these paths.
+    env_path : str or Path or None
+        Path to a .env file with CDF credentials used to fetch reference
+        models for governed spaces not resolvable from local YAML files.
+        Only active when *neat_session* is None.
     script_path : str or Path or None
         Explicit path to generate_documentation_v7.py (auto-detected otherwise).
     verbose : bool
         Print progress messages when True.
     neat_session : object or None
-        A live NeatSession for fetching CDM/IDM from CDF.
+        A live NeatSession for fetching CDM/IDM/ref models from CDF.
         Not injected by the plugin framework; use attach_plugin() for that.
     """
 
@@ -47,6 +56,8 @@ class HtmlDocExporter(DMSFileExporter):
         io=None,
         cdm=None,
         idm=None,
+        ref_paths=None,
+        env_path=None,
         script_path=None,
         verbose=False,
         neat_session=None,
@@ -55,6 +66,8 @@ class HtmlDocExporter(DMSFileExporter):
         self._output_path = Path(io).resolve() if io else None
         self._cdm = Path(cdm) if cdm else None
         self._idm = Path(idm) if idm else None
+        self._ref_paths = list(ref_paths) if ref_paths else None
+        self._env_path = Path(env_path) if env_path else None
         self._script_path = script_path
         self._verbose = verbose
         self._neat_session = neat_session
@@ -84,6 +97,7 @@ class HtmlDocExporter(DMSFileExporter):
 
         cdm_tmp_path = None
         idm_tmp_path = None
+        ref_tmp_paths = []
 
         with tempfile.TemporaryDirectory() as _tmp:
             tmp_dir = Path(_tmp)
@@ -123,6 +137,49 @@ class HtmlDocExporter(DMSFileExporter):
                 else:
                     idm_path = _BUNDLED_IDM if _BUNDLED_IDM.exists() else None
 
+                # ── Ref models from governedSpaces ───────────────────────────
+                resolved_ref_paths = list(self._ref_paths or [])
+                if self._neat_session is not None:
+                    import yaml as _yaml
+                    try:
+                        with open(tmp_yaml, encoding="utf-8", errors="replace") as _f:
+                            _raw = _yaml.safe_load(_f) or {}
+                        _meta = _raw.get("metadata", _raw.get("Metadata", {})) or {}
+                        _governed_raw = _meta.get("governedSpaces", "")
+                        _system = {"cdf_cdm", "cdf_idm"}
+                        _model_space = _meta.get("space", "")
+                        _ref_spaces = [
+                            s.strip()
+                            for s in str(_governed_raw).replace(";", ",").split(",")
+                            if s.strip() and s.strip() not in _system
+                            and s.strip() != _model_space
+                        ]
+                        _covered = set()
+                        for _rp in resolved_ref_paths:
+                            _rp = Path(_rp)
+                            if _rp.exists():
+                                try:
+                                    with open(_rp, encoding="utf-8") as _rf:
+                                        _rm = _yaml.safe_load(_rf) or {}
+                                    _rs = (
+                                        _rm.get("metadata") or _rm.get("Metadata") or {}
+                                    ).get("space", "")
+                                    if _rs:
+                                        _covered.add(_rs)
+                                except Exception:
+                                    pass
+                        for _rs in _ref_spaces:
+                            if _rs in _covered:
+                                continue
+                            _fetched = _fetch_ref_yaml(
+                                self._neat_session, _rs, tmp_dir, verbose=verbose
+                            )
+                            ref_tmp_paths.extend(_fetched)
+                            resolved_ref_paths.extend(str(p) for p in _fetched)
+                    except Exception as _exc:
+                        if verbose:
+                            print(f"[html_doc] governedSpaces pre-fetch warning: {_exc}")
+
                 gen_script = _find_gen_script(self._script_path)
                 if verbose:
                     print("[html_doc] Using script: " + str(gen_script))
@@ -134,6 +191,8 @@ class HtmlDocExporter(DMSFileExporter):
                         output_path=file_path,
                         cdm_path=cdm_path,
                         idm_path=idm_path,
+                        ref_paths=resolved_ref_paths or None,
+                        env_path=self._env_path,
                     )
 
                 label = "[html_doc] Generated: " if verbose else "Generated: "
@@ -144,3 +203,8 @@ class HtmlDocExporter(DMSFileExporter):
                     cdm_tmp_path.unlink()
                 if idm_tmp_path and idm_tmp_path.exists():
                     idm_tmp_path.unlink()
+                for _rtp in ref_tmp_paths:
+                    try:
+                        Path(_rtp).unlink()
+                    except Exception:
+                        pass

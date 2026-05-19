@@ -23,10 +23,12 @@ def attach_plugin(neat_session):
     """
     write_obj = neat_session.physical_data_model.write
 
-    def _bound(self, io, cdm=None, idm=None, script_path=None, verbose=False):
+    def _bound(self, io, cdm=None, idm=None, ref_paths=None, env_path=None,
+               script_path=None, verbose=False):
         return _html_doc(
             self, io,
-            cdm=cdm, idm=idm, script_path=script_path, verbose=verbose,
+            cdm=cdm, idm=idm, ref_paths=ref_paths, env_path=env_path,
+            script_path=script_path, verbose=verbose,
             _neat_session=neat_session,
         )
 
