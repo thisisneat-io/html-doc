@@ -6145,24 +6145,33 @@ def run_generation(input_path, output_path, cdm_path=None, idm_path=None,
     if ref_view_ids:
         print(f"  Reference space views: {len(ref_view_ids)}")
 
-    # Collapse any duplicate bare-name YAML views that are shadowed by the
-    # fully-qualified Excel key for the same view.
+    # ── Deduplicate ref views ─────────────────────────────────────────────────
+    # For NEAT YAML inputs the Views section stores governed-space views as
+    # fully-qualified keys (e.g. "sp_ops_domain_model:Pump(version=2.5.24)").
+    # _load_ref_model also adds the same views as bare names ("Pump") keyed by
+    # the ref YAML.  After _newly_tagged both forms end up in ref_view_ids,
+    # causing duplicate cards, hierarchy nodes, and ER diagram nodes.
+    #
+    # Rule: when a bare-name canonical form exists (from _load_ref_model), the
+    # qualified form is redundant and must be removed from ref_view_ids and from
+    # domain_view_ids so that only one copy reaches the documentation.
     _ref_space_prefixes_post = tuple(f'{s}:' for s in ref_spaces) if ref_spaces else ()
     _ref_qual_to_bare: dict = {}
     if _ref_space_prefixes_post:
-        # bare-name keys in ref_view_ids (loaded from a legacy YAML)
         _bare_ref_ids = {k for k in ref_view_ids if not k.startswith(_ref_space_prefixes_post)}
         if _bare_ref_ids:
             for k in list(all_views.keys()):
                 if k.startswith(_ref_space_prefixes_post):
                     _, bare, _ = _parse_qualified_id(k)
                     if bare in _bare_ref_ids:
-                        # qualified Excel key maps to the bare YAML key
                         _ref_qual_to_bare[k] = bare
 
-    # Normalise relations that use bare names → keep qualified keys consistent.
-    # Also handle the reverse: relations that still reference a bare name when
-    # the canonical key is now the qualified form.
+    # Remove the qualified duplicates — keep only the bare canonical form
+    if _ref_qual_to_bare:
+        ref_view_ids -= set(_ref_qual_to_bare.keys())
+        print(f"  Deduplicated {len(_ref_qual_to_bare)} qualified ref keys → bare canonical forms")
+
+    # Normalise relations: qualified ↔ bare cross-references
     _bare_to_qual: dict = {v: k for k, v in _ref_qual_to_bare.items()}
     if _ref_qual_to_bare or _bare_to_qual:
         direct_relations = [
@@ -6175,8 +6184,6 @@ def run_generation(input_path, output_path, cdm_path=None, idm_path=None,
                         or r['target'])}
             for r in direct_relations
         ]
-        if _ref_qual_to_bare:
-            print(f"  Collapsed {len(_ref_qual_to_bare)} bare-name YAML refs → qualified keys")
 
     # Add ref views to domain_view_ids so they get full entity cards and ER diagrams
     domain_view_ids |= ref_view_ids
