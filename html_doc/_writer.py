@@ -4,13 +4,13 @@ from pathlib import Path
 
 # ── Bundled paths ────────────────────────────────────────────────────────────
 _PKG_DIR = Path(__file__).parent
-_BUNDLED_SCRIPT = _PKG_DIR / 'generate_documentation_v8.py'
+_BUNDLED_SCRIPT = _PKG_DIR / 'generate_documentation_v9.py'
 _BUNDLED_CDM    = _PKG_DIR / 'CogniteCore.yaml'
 _BUNDLED_IDM    = _PKG_DIR / 'CogniteProcessIndustries.yaml'
 
 
 def _find_gen_script(hint=None):
-    """Locate generate_documentation_v8.py, preferring bundled copy."""
+    """Locate generate_documentation_v9.py, preferring bundled copy."""
     candidates = []
     if hint:
         candidates.append(Path(hint))
@@ -18,23 +18,26 @@ def _find_gen_script(hint=None):
     if env:
         candidates.append(Path(env))
     candidates += [
-        _BUNDLED_SCRIPT,                                           # bundled v8 (primary)
+        _BUNDLED_SCRIPT,  # bundled v9 (primary)
+        Path(__file__).parent.parent.parent / 'html-doc' / 'html_doc' / 'generate_documentation_v9.py',
+        Path(__file__).parent.parent.parent / 'NEAT_PROJECTS' / 'generate_documentation_v9.py',
+        Path.cwd() / 'html-doc' / 'html_doc' / 'generate_documentation_v9.py',
+        Path.cwd() / 'NEAT_PROJECTS' / 'generate_documentation_v9.py',
+        Path.cwd() / 'generate_documentation_v9.py',
+        # v8 / v7 fallbacks for backwards compatibility
+        _PKG_DIR / 'generate_documentation_v8.py',
+        Path(__file__).parent.parent.parent / 'html-doc' / 'html_doc' / 'generate_documentation_v8.py',
         Path(__file__).parent.parent.parent / 'NEAT_PROJECTS' / 'generate_documentation_v8.py',
-        Path.cwd() / 'NEAT_PROJECTS' / 'generate_documentation_v8.py',
         Path.cwd() / 'generate_documentation_v8.py',
-        Path('C:/neat/NEAT_PROJECTS/generate_documentation_v8.py'),
-        # v7 fallbacks for backwards compatibility
         Path(__file__).parent.parent.parent / 'NEAT_PROJECTS' / 'generate_documentation_v7.py',
-        Path.cwd() / 'NEAT_PROJECTS' / 'generate_documentation_v7.py',
         Path.cwd() / 'generate_documentation_v7.py',
-        Path('C:/neat/NEAT_PROJECTS/generate_documentation_v7.py'),
     ]
     for p in candidates:
         if p.exists():
             return p.resolve()
     raise FileNotFoundError(
-        'Cannot find generate_documentation_v8.py (or v7 fallback). '
-        'Set NEAT_HTML_DOC_SCRIPT env-var or pass script_path= to browse_model().'
+        'Cannot find generate_documentation_v9.py (or v8/v7 fallback). '
+        'Set NEAT_HTML_DOC_SCRIPT env-var or pass script_path= to html_doc().'
     )
 
 
@@ -43,7 +46,7 @@ def _import_run_generation(script_path):
     if parent not in sys.path:
         sys.path.insert(0, parent)
     import importlib.util
-    spec = importlib.util.spec_from_file_location('_gen_docs_v8', script_path)
+    spec = importlib.util.spec_from_file_location('_gen_docs_v9', script_path)
     mod  = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod.run_generation
@@ -168,7 +171,7 @@ def html_doc(self, io, cdm=None, idm=None, ref_paths=None, env_path=None,
         Only used in the standalone (non-session) path; when *_neat_session*
         is supplied, the live session is used instead.
     script_path : str | Path | None
-        Explicit path to generate_documentation_v8.py (auto-detected otherwise).
+        Explicit path to generate_documentation_v9.py (auto-detected otherwise).
     verbose : bool
         If True, print progress messages.  Defaults to False (quiet).
     """

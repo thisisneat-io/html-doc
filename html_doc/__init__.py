@@ -8,7 +8,7 @@ __all__ = ["attach_plugin", "HtmlDocPlugin", "HtmlDocExporter"]
 
 
 def attach_plugin(neat_session):
-    """Monkey-patch browse_model() onto neat.physical_data_model.write.
+    """Monkey-patch html_doc() onto neat.physical_data_model.write.
 
     This is the session-aware path: CDM and IDM are fetched live from CDF
     using the same credentials as the calling session, before falling back
@@ -19,7 +19,7 @@ def attach_plugin(neat_session):
     from html_doc import attach_plugin
     neat = attach_plugin(NeatSession(client))
     neat.physical_data_model.read.cdf("my_space", "my_model", "v1")
-    neat.physical_data_model.write.browse_model("docs/model.html")
+    neat.physical_data_model.write.html_doc("docs/model.html")
     """
     write_obj = neat_session.physical_data_model.write
 

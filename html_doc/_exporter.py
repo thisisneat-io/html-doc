@@ -43,7 +43,7 @@ class HtmlDocExporter(DMSFileExporter):
         models for governed spaces not resolvable from local YAML files.
         Only active when *neat_session* is None.
     script_path : str or Path or None
-        Explicit path to generate_documentation_v7.py (auto-detected otherwise).
+        Explicit path to generate_documentation_v9.py (auto-detected otherwise).
     verbose : bool
         Print progress messages when True.
     neat_session : object or None
@@ -110,7 +110,7 @@ class HtmlDocExporter(DMSFileExporter):
                 if not tmp_yaml.exists() or tmp_yaml.stat().st_size == 0:
                     raise RuntimeError(
                         "YAML export produced an empty file. "
-                        "Ensure a data model is loaded before calling write.browse_model()."
+                        "Ensure a data model is loaded before calling write.html_doc()."
                     )
 
                 if self._cdm:

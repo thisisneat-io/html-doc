@@ -434,16 +434,40 @@ def classify_by_industry_domain(view_id, view_info, all_views):
         # Default equipment to rotating (pumps, compressors, motors, generators, etc.)
         return 'rotating_equipment', 'equipment_default'
     
-    # Phase 5: CDM Implementation chain for non-equipment types
-    implements = view_info.get('implements', '')
-    for impl in implements.split(','):
-        impl = impl.strip().replace('cdf_cdm:', '').replace('(version=v1)', '').strip()
-        if impl == 'CogniteTimeSeries':
-            return 'timeseries_measurements', 'cdm_implements'
-        if impl == 'CogniteActivity':
-            return 'activities_work', 'cdm_implements'
-        if impl == 'CogniteFile':
-            return 'documents_files', 'cdm_implements'
+    # Phase 5: CDM Implementation chain - walk full ancestry to find CDM anchor
+    # Handles models where only module roots carry the CDM implements chain
+    # (subclasses reference only their immediate local parent).
+    def _cdm_anchor(vid, _seen=None):
+        if _seen is None:
+            _seen = set()
+        if vid in _seen:
+            return None
+        _seen.add(vid)
+        v = all_views.get(vid)
+        if not v:
+            return None
+        for part in v.get('implements', '').split(','):
+            part = (part.strip()
+                    .replace('cdf_cdm:', '').replace('cdf_idm:', '')
+                    .replace('(version=v1)', '').strip())
+            if part == 'CogniteTimeSeries':
+                return 'timeseries_measurements'
+            if part == 'CogniteActivity':
+                return 'activities_work'
+            if part == 'CogniteMaintenanceOrder':
+                return 'activities_work'
+            if part == 'CogniteEquipment':
+                return 'static_equipment'
+            if part == 'CogniteFile':
+                return 'documents_files'
+            if part and part in all_views:
+                result = _cdm_anchor(part, _seen)
+                if result:
+                    return result
+        return None
+    _cat = _cdm_anchor(view_id)
+    if _cat:
+        return _cat, 'cdm_implements'
     
     # Phase 6: Name pattern matching for assets and other types
     # Check domains in priority order (more specific first)
@@ -529,9 +553,21 @@ def parse_yaml_file(filepath):
                     next_stripped = lines[i + 1].strip()
                     if next_stripped.startswith('Value:'):
                         value = next_stripped[len('Value:'):].strip()
+                        i += 2
+                        # NEAT YAML dump may wrap long Values onto indented continuation lines
+                        while i < len(lines):
+                            cont = lines[i]
+                            if cont.strip().startswith('- Key:'):
+                                break
+                            if cont.strip().startswith('Value:'):
+                                break
+                            if cont.startswith('  ') or cont.startswith('\t'):
+                                value += ' ' + cont.strip()
+                                i += 1
+                            else:
+                                break
                         if key and value:
                             metadata[key] = value
-                        i += 2
                         continue
             elif ':' in stripped and not stripped.startswith('-'):
                 key, _, value = stripped.partition(':')
@@ -590,18 +626,8 @@ def parse_yaml_file(filepath):
                 prop_info['true_source'] = container if container else normalized_view
                 properties_by_view[view_name].append(prop_info.copy())
                 
-                # Capture direct relation
-                if prop_info.get('connection') and 'direct' in prop_info.get('connection', '').lower():
-                    target = prop_info.get('type', '').replace('cdf_cdm:', '').replace('(version=v1)', '').strip()
-                    if target:
-                        direct_relations.append({
-                            'source': normalized_view,
-                            'property': prop_info.get('name', ''),
-                            'display_name': prop_info.get('display_name', ''),
-                            'target': target,
-                            'min_count': prop_info.get('min_count', '0'),
-                            'max_count': prop_info.get('max_count', '1'),
-                        })
+                # Capture direct / edge / reverse relations
+                _append_model_relation(direct_relations, view_name, prop_info)
     
     # Parse Views
     views_match = re.search(r'Views:\n(.*?)(?=\nContainers:|\Z)', content, re.DOTALL)
@@ -631,10 +657,16 @@ def parse_yaml_file(filepath):
                     elif key == 'Implements':
                         view_info['implements'] = value
             
-            normalized = view_name.replace('cdf_cdm:', '').replace('(version=v1)', '').strip()
+            # Governed-space views: keep full qualified ID (incl. version) as canonical key.
+            if ':' in view_name and '(version=' in view_name:
+                canonical_key = view_name
+            else:
+                canonical_key = view_name.replace('cdf_cdm:', '').replace('(version=v1)', '').strip()
             view_info['properties'] = properties_by_view.get(view_name, [])
             view_info['_in_model_views'] = True
-            views[normalized] = view_info
+            views[canonical_key] = view_info
+
+    direct_relations = normalize_model_relations(direct_relations, views)
     
     return metadata, properties_by_view, views, direct_relations
 
@@ -1060,16 +1092,8 @@ def parse_toolkit_dir(path, version_override=None, config_path=None):
                 }
                 props.append(prop)
 
-                # Capture as direct relation for ER diagrams
-                if connection == 'direct' and val_type and val_type not in ('direct_relation',):
-                    direct_relations.append({
-                        'source':       view_key,
-                        'property':     prop_id,
-                        'display_name': prop_name,
-                        'target':       val_type,
-                        'min_count':    '0',
-                        'max_count':    '1000' if val_type.endswith('[]') else '1',
-                    })
+                # Capture direct / edge / reverse relations for ER diagrams
+                _append_model_relation(direct_relations, view_key, prop)
 
         properties_by_view[view_key] = props
         view_info['properties'] = props
@@ -1263,23 +1287,8 @@ def parse_excel_file(filepath):
                 }
                 properties_by_view[view_name].append(prop_info)
 
-                # Capture direct relation
-                if connection_val and 'direct' in connection_val.lower():
-                    target = (
-                        prop_info['type']
-                        .replace('cdf_cdm:', '')
-                        .replace('(version=v1)', '')
-                        .strip()
-                    )
-                    if target:
-                        direct_relations.append({
-                            'source': normalized_view,
-                            'property': prop_id,
-                            'display_name': prop_info['display_name'],
-                            'target': target,
-                            'min_count': prop_info['min_count'],
-                            'max_count': prop_info['max_count'],
-                        })
+                # Capture direct / edge / reverse relations
+                _append_model_relation(direct_relations, view_name, prop_info)
 
     # ── Views ────────────────────────────────────────────────────────────────
     if 'Views' in wb.sheetnames:
@@ -1370,7 +1379,25 @@ def get_all_properties_for_view(view_id, properties_by_view, all_views):
     normalized = view_id.replace('cdf_cdm:', '').replace('(version=v1)', '').strip()
     
     own_props = []
-    for key in [view_id, f'cdf_cdm:{normalized}(version=v1)', normalized]:
+    _lookup_keys: list[str] = []
+    _seen: set[str] = set()
+
+    def _add_key(k: str) -> None:
+        if k and k not in _seen:
+            _seen.add(k)
+            _lookup_keys.append(k)
+
+    _add_key(view_id)
+    _add_key(normalized)
+    _sp, _bare, _ver = _parse_qualified_id(view_id)
+    if _sp and _bare:
+        if _ver:
+            _add_key(f"{_sp}:{_bare}(version={_ver})")
+        _add_key(f"{_sp}:{_bare}(version=v1)")
+        _add_key(f"{_sp}:{_bare}")
+    _add_key(f"cdf_cdm:{normalized}(version=v1)")
+
+    for key in _lookup_keys:
         if key in properties_by_view:
             own_props = list(properties_by_view[key])
             break
@@ -1399,7 +1426,7 @@ def get_all_properties_for_view(view_id, properties_by_view, all_views):
         else:
             prop['inherited_from'] = None
     
-    view = all_views.get(normalized) or all_views.get(view_id, {})
+    view = all_views.get(view_id) or all_views.get(normalized) or {}
     implements = view.get('implements', '')
     
     if implements:
@@ -1443,6 +1470,74 @@ def _normalize_relation_target(value_type):
     target = re.sub(r'\(version=.*?\)', '', target).strip()
     return target or None
 
+
+
+
+def _canonical_view_key(view_name: str) -> str:
+    """Return the same canonical view key used in the views dict."""
+    view_name = (view_name or "").strip()
+    if ":" in view_name and "(version=" in view_name:
+        return view_name
+    return view_name.replace("cdf_cdm:", "").replace("(version=v1)", "").strip()
+
+
+def _connection_kind(connection: str) -> str | None:
+    """Classify a NEAT Connection value as direct, edge, or reverse."""
+    c = (connection or "").strip()
+    if not c or c.lower() in ("null", "none"):
+        return None
+    cl = c.lower()
+    if cl.startswith("edge") or "edge(" in cl:
+        return "edge"
+    if cl.startswith("reverse") or "reverse(" in cl:
+        return "reverse"
+    if cl.startswith("direct") or "direct" in cl:
+        return "direct"
+    return None
+
+
+def _relation_target_from_prop(prop_info: dict) -> str:
+    """Extract relation target view id from a property row."""
+    value_type = (prop_info.get("type") or "").strip()
+    connection = prop_info.get("connection") or ""
+    kind = _connection_kind(connection)
+    if kind == "edge":
+        m = re.search(r"edgeSource=([^,\)]+)", connection, re.I)
+        if m:
+            return m.group(1).strip()
+    target = value_type.replace("cdf_cdm:", "").replace("(version=v1)", "").strip()
+    return target
+
+
+def _append_model_relation(relations: list, source_view: str, prop_info: dict) -> None:
+    """Append a direct/edge/reverse relation if it has a resolvable target."""
+    connection = prop_info.get("connection") or ""
+    kind = _connection_kind(connection)
+    if not kind:
+        return
+    target = _relation_target_from_prop(prop_info)
+    if not target:
+        return
+    relations.append({
+        "source": _canonical_view_key(source_view),
+        "property": prop_info.get("name", ""),
+        "display_name": prop_info.get("display_name", ""),
+        "target": target,
+        "min_count": prop_info.get("min_count", "0"),
+        "max_count": prop_info.get("max_count", "1"),
+        "kind": kind,
+        "connection": connection,
+    })
+
+
+def normalize_model_relations(relations: list, all_views: dict) -> list:
+    """Resolve relation endpoints to canonical keys in *all_views*."""
+    return [
+        {**rel,
+         "source": _resolve_view_key(rel.get("source", ""), all_views),
+         "target": _resolve_view_key(rel.get("target", ""), all_views)}
+        for rel in relations
+    ]
 
 def _is_direct_relation_property(prop, all_views):
     """Best-effort check whether a property represents a direct relation edge."""
@@ -1488,12 +1583,17 @@ def augment_relations_with_inherited_core(views, all_views, direct_relations):
         cdm_base = get_cdm_base_type(view_id, all_views)
 
         for prop in props:
-            if not _is_direct_relation_property(prop, all_views):
+            kind = prop.get('kind') or _connection_kind(prop.get('connection', ''))
+            if not kind and not _is_direct_relation_property(prop, all_views):
                 continue
 
             target = _normalize_relation_target(prop.get('type', ''))
+            if not target and kind in ('edge', 'reverse'):
+                target = _relation_target_from_prop(prop)
             if not target:
                 continue
+            if not kind:
+                kind = 'direct'
 
             prop_name = prop.get('name', '') or ''
             prop_name_norm = re.sub(r'[^a-z0-9]', '', prop_name.lower())
@@ -1515,6 +1615,8 @@ def augment_relations_with_inherited_core(views, all_views, direct_relations):
                 'target': target,
                 'min_count': prop.get('min_count', '0'),
                 'max_count': prop.get('max_count', '1'),
+                'kind': kind,
+                'connection': prop.get('connection', ''),
                 'inherited': bool(prop.get('inherited_from')),
                 'inherited_from': prop.get('inherited_from', ''),
             })
@@ -1615,12 +1717,68 @@ def categorize_by_cdm_hierarchy(views, all_views):
     return categories, category_labels
 
 
+def classify_view_role(view_id, all_views, relations=None, ref_view_ids=None):
+    """Classify a view as object, edge (link type), reference, or cdm."""
+    ref_view_ids = ref_view_ids or set()
+    relations = relations or []
+    if view_id in ref_view_ids:
+        return "reference"
+    sp, bare, _ = _parse_qualified_id(view_id)
+    bare = bare or view_id
+    if view_id.startswith("Cognite") or view_id.startswith("cdf_cdm:") or (
+        bare and bare.startswith("Cognite")
+    ):
+        return "cdm"
+
+    edge_source_names = set()
+    for rel in relations:
+        conn = rel.get("connection") or ""
+        m = re.search(r"edgeSource=([^,\)]+)", conn, re.I)
+        if m:
+            edge_source_names.add(m.group(1).strip())
+        if rel.get("kind") == "edge" and rel.get("target"):
+            _, t_bare, _ = _parse_qualified_id(rel["target"])
+            edge_source_names.add(t_bare or rel["target"])
+
+    if bare in edge_source_names:
+        return "edge"
+
+    props = all_views.get(view_id, {}).get("properties") or []
+    own = [pr for pr in props if not pr.get("inherited_from")]
+    rel_props = [pr for pr in own if _connection_kind(pr.get("connection") or "")]
+    scalar_props = [pr for pr in own if not _connection_kind(pr.get("connection") or "")]
+    if rel_props and not scalar_props:
+        kinds = {_connection_kind(pr.get("connection") or "") for pr in rel_props}
+        if kinds == {"edge"}:
+            return "edge"
+    return "object"
+
+
+def connection_kind_label(connection: str) -> str:
+    """Short label for a property connection (direct / edge / reverse)."""
+    kind = _connection_kind(connection or "")
+    if kind == "edge":
+        return "Edge"
+    if kind == "reverse":
+        return "Reverse"
+    if kind == "direct":
+        return "Direct"
+    return ""
+
+
 # =============================================================================
 # UML-STYLE ER DIAGRAM GENERATION
 # Multi-level abstraction with topic focus
 # =============================================================================
 
 class UMLDiagramGenerator:
+    # Match mermaid.initialize maxTextSize in generated HTML
+    MERMAID_MAX_TEXT_SIZE = 500_000
+    MERMAID_SPACED_INIT = (
+        "%%{init: {'flowchart': {'nodeSpacing': 60, 'rankSpacing': 90, 'padding': 16}} }%%"
+    )
+
+
     """Generates domain-model-centric UML ER diagrams.
     
     Domain views (from the model's own Views list) are the heroes of all diagrams.
@@ -1635,7 +1793,7 @@ class UMLDiagramGenerator:
                  domain_view_ids=None, ref_view_ids=None):
         self.views = views
         self.all_views = all_views
-        self.relations = direct_relations
+        self.relations = normalize_model_relations(direct_relations, all_views)
         self.model_name = model_name
         self.children, self.parents = build_inheritance_tree(views)
         # Views belonging to governed reference spaces (distinct from CDM/IDM)
@@ -1643,14 +1801,16 @@ class UMLDiagramGenerator:
 
         self.relations_by_source = defaultdict(list)
         self.relations_by_target = defaultdict(list)
-        for rel in direct_relations:
+        for rel in self.relations:
             self.relations_by_source[rel['source']].append(rel)
             self.relations_by_target[rel['target']].append(rel)
         
         self.node_mapping = {}
-        
+        self.node_tooltip_labels = {}
+
         self._init_domain_views(domain_view_ids)
-        self._detect_clusters()
+        self._detect_space_clusters()
+        self._classify_edge_type_views()
     
     def _init_domain_views(self, domain_view_ids):
         """Separate domain views from CDM views."""
@@ -1670,81 +1830,90 @@ class UMLDiagramGenerator:
                 else:
                     self.cdm_views[vid] = vinfo
     
-    def _detect_clusters(self):
-        """Auto-detect functional clusters from naming patterns and relationships."""
+    def _space_label(self, space: str) -> str:
+        """Human-friendly label for a governed model space (full space id)."""
+        return space if space else "Other"
+
+    def _detect_space_clusters(self):
+        """Group domain views by data model space (cloud clusters in diagrams)."""
         domain_ids = set(self.domain_views.keys())
-        if not domain_ids:
-            self.clusters = {}
-            return
-        
-        prefix_groups = defaultdict(list)
-        ungrouped = []
-        
+        by_space = defaultdict(list)
         for v in sorted(domain_ids):
-            parts = v.split('_')
-            if len(parts) >= 2 and parts[0] and len(parts[0]) >= 2:
-                prefix_groups[parts[0]].append(v)
-            else:
-                ungrouped.append(v)
-        
-        self.clusters = {}
-        used = set()
-        
-        for prefix, pviews in sorted(prefix_groups.items(), key=lambda x: -len(x[1])):
-            if len(pviews) >= 3:
-                self.clusters[f"{prefix} Classification"] = pviews
-                used.update(pviews)
-            else:
-                ungrouped.extend(pviews)
-        
-        remaining = [v for v in ungrouped if v not in used]
-        
-        if remaining:
-            adj = defaultdict(set)
-            for rel in self.relations:
-                src, tgt = rel['source'], rel['target']
-                if src in remaining and tgt in remaining:
-                    adj[src].add(tgt)
-                    adj[tgt].add(src)
-            
-            visited = set()
-            for v in remaining:
-                if v not in visited:
-                    component = []
-                    queue = [v]
-                    while queue:
-                        node = queue.pop(0)
-                        if node in visited:
-                            continue
-                        visited.add(node)
-                        component.append(node)
-                        for neighbor in adj.get(node, []):
-                            if neighbor not in visited:
-                                queue.append(neighbor)
-                    
-                    if component:
-                        hub = max(component, key=lambda x: len(adj.get(x, set())))
-                        # Name by most-common CDM parent so cluster label never matches a node label
-                        from collections import Counter as _Ctr
-                        parent_ctr = _Ctr(
-                            p for v in component
-                            for p in [self._get_cdm_parent(v)] if p
-                        )
-                        if parent_ctr:
-                            base = parent_ctr.most_common(1)[0][0] + " Types"
-                        else:
-                            base = hub
-                        # ensure unique key
-                        key = base
-                        suffix = 2
-                        while key in self.clusters:
-                            key = f"{base} ({suffix})"
-                            suffix += 1
-                        self.clusters[key] = component
-        
-        if not self.clusters:
-            self.clusters[self.model_name] = sorted(domain_ids)
-    
+            sp, _, _ = _parse_qualified_id(v)
+            by_space[sp or "Other"].append(v)
+        self.clusters = {self._space_label(sp): views for sp, views in sorted(by_space.items())}
+        self.space_by_view = {v: sp for sp, views in by_space.items() for v in views}
+
+    def _detect_clusters(self):
+        """Backward-compatible alias for space-based clustering."""
+        self._detect_space_clusters()
+
+    def _classify_edge_type_views(self):
+        '''Mark views that represent DMS edge / link types (vs object entity views).'''
+        self.edge_type_view_ids = set()
+        self.view_roles = {}
+        for vid in self.domain_views:
+            role = classify_view_role(vid, self.all_views, self.relations, self.ref_views)
+            self.view_roles[vid] = role
+            if role == "edge":
+                self.edge_type_view_ids.add(vid)
+
+    def _view_role(self, view_id):
+        return self.view_roles.get(
+            view_id,
+            classify_view_role(view_id, self.all_views, self.relations, self.ref_views),
+        )
+
+    def _tooltip_label_for_view(self, view_id):
+        '''Full label for diagram hover (diagram-desc font size in UI).'''
+        label = self._get_label(view_id, for_diagram=True)
+        role = self._view_role(view_id)
+        if role == "edge":
+            suffix = " · Edge type"
+        elif role == "reference":
+            suffix = " · Reference type"
+        elif role == "cdm":
+            suffix = " · CDM"
+        else:
+            suffix = " · Object view"
+        return label + suffix
+
+    def _mermaid_node_def(self, view_id):
+        '''Mermaid node line for a view (shape differs for edge-type views).'''
+        s = self._diagram_node_id(view_id)
+        node_label = self._get_label(view_id, for_diagram=True).replace('"', "'")
+        if view_id in getattr(self, "edge_type_view_ids", set()):
+            return f'{s}(["{node_label}"]):::edgeview'
+        if view_id in self.ref_views:
+            return f'{s}["{node_label}"]:::ref'
+        return f'{s}["{node_label}"]'
+
+    def _er_diagram_legend_html(self):
+        '''Legend for relation arrows and view-type node shapes.'''
+        return (
+            '<div class="er-legend" style="margin:0.75rem 0 1.25rem 0;padding:0.75rem 1rem;'
+            'background:var(--bg-card);border:1px solid var(--border-color);border-radius:8px;">'
+            "<h4 style=\"margin:0 0 0.5rem 0;font-size:0.95rem;\">Diagram legend</h4>"
+            '<div style="display:flex;flex-wrap:wrap;gap:1.25rem 2rem;font-size:0.85rem;color:var(--text-secondary);">'
+            "<div><strong>Relations</strong><ul style=\"margin:0.35rem 0 0 1rem;padding:0;\">"
+            "<li><span style=\"color:#94a3b8;\">──►</span> Direct (object reference)</li>"
+            "<li><span style=\"color:#94a3b8;\">==►</span> Edge (link via edge type)</li>"
+            "<li><span style=\"color:#94a3b8;\">- - ►</span> Reverse</li>"
+            "</ul></div>"
+            "<div><strong>View boxes</strong><ul style=\"margin:0.35rem 0 0 1rem;padding:0;\">"
+            "<li>Rectangle — object view</li>"
+            "<li>Rounded — edge / link type view</li>"
+            "<li>Purple dashed — reference type</li>"
+            "<li>Gray dashed — CDM type</li>"
+            "</ul></div>"
+            "<p style=\"margin:0.5rem 0 0 0;font-size:0.85rem;\">"
+            "Hover a box to read the full <code>space:View</code> id. "
+            "In property tables, <span class=\"conn-badge conn-direct\">Direct</span> "
+            "<span class=\"conn-badge conn-edge\">Edge</span> "
+            "<span class=\"conn-badge conn-reverse\">Reverse</span> mark connection kinds."
+            "</p></div></div>"
+        )
+
     def _get_cdm_parent(self, view_id):
         """Get the CDM parent type name for a domain view."""
         view = self.all_views.get(view_id, {})
@@ -1763,31 +1932,50 @@ class UMLDiagramGenerator:
             return [p for p in props if not p.get('inherited_from')]
         return []
     
-    def _get_label(self, view_id):
-        """Get clean display label for a view.
+    def _get_label(self, view_id, for_diagram=False):
+        """Get display label for a view.
 
-        Strips any namespace prefix (e.g. ``cdf_cdm:``, ``sp_ops_domain_model:``)
-        and version tags (e.g. ``(version=v1)``, ``(version=2.5.24)``) so that
-        every node in every diagram level shows a plain, readable name.
+        When *for_diagram* is True and the view is in a governed space, returns
+        ``space:Name`` (version omitted) so split-space models stay identifiable.
         """
-        def _clean(s):
-            # Remove any "word:" namespace prefix
-            s = re.sub(r'^[a-zA-Z][a-zA-Z0-9_]*:', '', s)
-            # Remove "(version=...)" tags
+        def _clean(s, keep_space=False):
+            s = (s or '').strip()
+            if not keep_space:
+                s = re.sub(r'^[a-zA-Z][a-zA-Z0-9_]*:', '', s)
             s = re.sub(r'\s*\(version=[^)]+\)', '', s).strip()
             return s
 
+        sp, bare, _ver = _parse_qualified_id(view_id)
+        display = ''
         for store in (self.views, self.all_views):
             if view_id in store:
                 info = store[view_id]
                 raw = info.get('display_name') or info.get('name', '')
-                name = _clean(raw)
-                if name and name != view_id:
-                    return name
-                break
-        # Fall back to cleaning the view_id itself
-        cleaned_id = _clean(view_id)
-        return cleaned_id if cleaned_id else view_id
+                display = _clean(raw)
+                if display and display != view_id:
+                    break
+                display = ''
+        name = display or bare or _clean(view_id)
+
+        if for_diagram and sp:
+            return f'{sp}:{name}'
+        return name if name else view_id
+
+    def _diagram_node_id(self, view_id):
+        """Resolved, sanitized Mermaid node id for a view key."""
+        resolved = _resolve_view_key(view_id, self.all_views)
+        sid = re.sub(r'[^a-zA-Z0-9]', '_', resolved)[:60].strip('_')
+        if not sid or sid[0].isdigit():
+            sid = 'n_' + sid
+        return sid
+
+    def _escape_mermaid_label(self, label):
+        """Escape characters that break Mermaid 11 flowchart edge labels."""
+        s = (label or '').replace('"', "'").replace('|', '/').replace('\n', ' ')
+        # Square brackets inside |"..."| labels break Mermaid 11 parsers (conflict with node syntax).
+        s = s.replace('[', '(').replace(']', ')')
+        s = re.sub(r'[^\x20-\x7e]', '', s)
+        return s
     
     def _sanitize(self, s, record=True):
         """Make string safe for Mermaid IDs and record mapping.
@@ -1797,20 +1985,23 @@ class UMLDiagramGenerator:
         'sp_asset_maintenance:WorkOrderComponent' — both share the same 25-char
         prefix, which caused diagram swapping with the old limit).
         """
-        sanitized = re.sub(r'[^a-zA-Z0-9]', '_', s)[:60]
+        sanitized = re.sub(r'[^a-zA-Z0-9]', '_', s)[:60].strip('_')
+        if not sanitized or sanitized[0].isdigit():
+            sanitized = 'n_' + sanitized
         if record and (s in self.views or s in self.all_views):
             self.node_mapping[sanitized] = s
         return sanitized
     
     def _register_node(self, view_id):
         """Register a node ID for clickability, including display name mapping."""
-        sanitized = re.sub(r'[^a-zA-Z0-9]', '_', view_id)[:60]
+        sanitized = self._diagram_node_id(view_id)
         if view_id in self.views or view_id in self.all_views:
             self.node_mapping[sanitized] = view_id
             self.node_mapping[view_id] = view_id
             label = self._get_label(view_id)
             if label and label != view_id:
                 self.node_mapping[label] = view_id
+            self.node_tooltip_labels[sanitized] = self._tooltip_label_for_view(view_id)
     
     def _get_multiplicity(self, rel):
         """Get UML multiplicity string."""
@@ -1879,16 +2070,16 @@ classDiagram
                 result.append((src, tgt, label))
         return result
 
-    def _get_domain_relations(self, include_cdm_targets=False):
+    def _get_domain_relations(self, include_cdm_targets=False, kinds=None):
         """Get relations involving domain views.
 
-        If include_cdm_targets is False (default), only domain→domain edges are returned
-        (safe for diagrams without CDM nodes present).
-        If True, also include domain→CDM edges so nothing is hidden.
+        kinds: optional set like {'direct','edge','reverse'}; None = all kinds.
         """
         domain_ids = set(self.domain_views.keys())
         result = []
         for r in self.relations:
+            if kinds is not None and r.get('kind', 'direct') not in kinds:
+                continue
             if r['source'] not in domain_ids:
                 continue
             if r['target'] in domain_ids:
@@ -1896,6 +2087,302 @@ classDiagram
             elif include_cdm_targets and r['target'] in self.all_views:
                 result.append(r)
         return result
+
+    def _relation_arrow(self, src, tgt, label, kind='direct', mult=None):
+        """Mermaid arrow for direct (solid), edge (thick), or reverse (dashed) relations."""
+        s, t = self._diagram_node_id(src), self._diagram_node_id(tgt)
+        label = self._escape_mermaid_label(label)
+        if mult is not None:
+            label = f'{label} ({mult})'
+        if kind == 'edge':
+            return f'    {s} ==>|"{label}"| {t}'
+        if kind == 'reverse':
+            return f'    {s} -.->|"rev {label}"| {t}'
+        return f'    {s} -->|"{label}"| {t}'
+
+    def _append_relation_edges(self, lines, rels, added, max_label=18, with_mult=False):
+        """Draw relation edges grouped by (src,tgt,kind)."""
+        groups = {}
+        for rel in rels:
+            src, tgt = rel['source'], rel['target']
+            if src in added and tgt in added:
+                kind = rel.get('kind', 'direct')
+                groups.setdefault((src, tgt, kind), []).append(rel)
+        for (src, tgt, kind), group_rels in groups.items():
+            props = [r.get('display_name') or r.get('property', '') for r in group_rels]
+            prefix = '' if kind == 'direct' else f'{kind}: '
+            label = (prefix + ' / '.join(p for p in props if p))[:max_label]
+            if with_mult:
+                mult = self._get_multiplicity(group_rels[0])
+                lines.append(self._relation_arrow(src, tgt, label, kind=kind, mult=mult))
+            else:
+                lines.append(self._relation_arrow(src, tgt, label, kind=kind))
+
+
+    def _mermaid_spaced_init_line(self):
+        return self.MERMAID_SPACED_INIT
+
+    def _estimate_mermaid_text_size(self, lines):
+        return len("\n".join(lines))
+
+    def _mermaid_exceeds_text_limit(self, lines):
+        return self._estimate_mermaid_text_size(lines) > self.MERMAID_MAX_TEXT_SIZE
+
+    def _build_space_cluster_sections(self, view_ids, cdm_ghost_nodes=None):
+        """Build Mermaid subgraphs by governed space with vertical sub-clusters (L1/L3 layout)."""
+        subgraph_lines = []
+        invisible_lines = []
+        added = set()
+        space_spine_tips = []
+
+        by_space = defaultdict(list)
+        for v in sorted(view_ids):
+            sp = getattr(self, 'space_by_view', {}).get(v) or _parse_qualified_id(v)[0] or 'Other'
+            by_space[sp].append(v)
+
+        for idx, (sp, members) in enumerate(sorted(by_space.items())):
+            label = self._space_label(sp).replace('"', "'")
+            sg_id = f'SP{idx}'
+            subgraph_lines.append(f'    subgraph {sg_id}["{label}"]')
+            group_tips = []
+            for g_idx, (group_label, group_members) in enumerate(self._layout_member_groups(members)):
+                g_id = f'{sg_id}G{g_idx}'
+                gl = group_label.replace('"', "'")
+                subgraph_lines.append(f'        subgraph {g_id}["{gl}"]')
+                row_ids = []
+                for v in group_members:
+                    s = self._diagram_node_id(v)
+                    self._register_node(v)
+                    node_label = self._get_label(v, for_diagram=True).replace('"', "'")
+                    subgraph_lines.append('            ' + self._mermaid_node_def(v).replace('    ', '            ', 1))
+                    added.add(v)
+                    row_ids.append(s)
+                subgraph_lines.append('        end')
+                self._append_vertical_spine(invisible_lines, row_ids)
+                if row_ids:
+                    group_tips.append(row_ids[0])
+            for i in range(len(group_tips) - 1):
+                invisible_lines.append(f'    {group_tips[i]} ~~~ {group_tips[i + 1]}')
+            subgraph_lines.append('    end')
+            if group_tips:
+                space_spine_tips.append(group_tips[0])
+
+        for i in range(len(space_spine_tips) - 1):
+            invisible_lines.append(f'    {space_spine_tips[i]} ~~~ {space_spine_tips[i + 1]}')
+
+        if cdm_ghost_nodes:
+            ghost_list = sorted(cdm_ghost_nodes - added)
+            if ghost_list:
+                if space_spine_tips:
+                    invisible_lines.append(f'    {space_spine_tips[-1]} ~~~ CDM_SPACER')
+                subgraph_lines.append('    CDM_SPACER[" "]')
+                subgraph_lines.append('    subgraph CDMREF["CDM References"]')
+                cdm_row_ids = []
+                for cp in ghost_list:
+                    cp_key = _resolve_view_key(cp, self.all_views)
+                    s = self._diagram_node_id(cp_key)
+                    self._register_node(cp_key)
+                    lbl = self._get_label(cp_key, for_diagram=True).replace('"', "'")
+                    subgraph_lines.append(f'        {s}(["{lbl}"]):::cdm')
+                    added.add(cp_key)
+                    cdm_row_ids.append(s)
+                subgraph_lines.append('    end')
+                self._append_vertical_spine(invisible_lines, cdm_row_ids)
+                subgraph_lines.append(
+                    '    style CDM_SPACER fill:none,stroke:none,color:transparent'
+                )
+
+        return subgraph_lines, invisible_lines, added
+
+
+    def _analyze_cross_space_relations(self, relations):
+        """Summarize domain-domain links that cross governed spaces vs stay internal."""
+        from collections import Counter
+
+        def _gov_space(vid):
+            sp, _, _ = _parse_qualified_id(vid)
+            return sp or ""
+
+        within = []
+        cross = []
+        to_external = []
+        for r in relations:
+            src, tgt = r["source"], r["target"]
+            sp_s, sp_t = _gov_space(src), _gov_space(tgt)
+            if not sp_s:
+                continue
+            if sp_t and sp_t == sp_s:
+                within.append(r)
+            elif sp_t and sp_t != sp_s:
+                cross.append(r)
+            else:
+                to_external.append(r)
+
+        pairs = Counter(
+            (_gov_space(r["source"]), _gov_space(r["target"]))
+            for r in cross
+        )
+        return {
+            "within": within,
+            "cross": cross,
+            "to_external": to_external,
+            "pairs": pairs,
+        }
+
+    def _cross_space_relations_html(self, relations):
+        """HTML blurb + table for cross-space domain references."""
+        summary = self._analyze_cross_space_relations(relations)
+        cross = summary["cross"]
+        within_n = len(summary["within"])
+        cross_n = len(cross)
+        ext_n = len(summary["to_external"])
+
+        lines = [
+            '<div class="cross-space-report" style="margin:1rem 0 1.5rem 0;padding:1rem;'
+            'background:var(--bg-card);border:1px solid var(--border-color);border-radius:8px;">',
+            "<h4>Cross-space relations</h4>",
+            "<p>Domain views in different <strong>governed spaces</strong> can reference each other "
+            "via direct properties (REFCL in source data). Links to CDM types "
+            "(CogniteAsset, CogniteEquipment, …) are <em>not</em> cross-space—they are shared infrastructure.</p>",
+            f"<ul><li><strong>{within_n}</strong> relation(s) between views in the <em>same</em> governed space</li>"
+            f"<li><strong>{cross_n}</strong> direct relation(s) from one governed space to another</li>"
+            f"<li><strong>{ext_n}</strong> relation(s) from a domain view to CDM / external types</li></ul>",
+        ]
+        if cross_n == 0:
+            lines.append(
+                '<p style="color:var(--text-secondary);">This model has <strong>no</strong> direct '
+                "cross-space view references. Modules are separated at the space level; integration "
+                "is via CDM anchor properties (e.g. <code>assets</code>, <code>equipment</code>) shown "
+                "in each per-space diagram below.</p>"
+            )
+        else:
+            lines.append('<table class="prop-table" style="margin-top:0.75rem;"><tr>'
+                         '<th>Source space</th><th>Target space</th><th>Count</th><th>Example properties</th></tr>')
+            by_pair = {}
+            for r in cross:
+                key = (_parse_qualified_id(r["source"])[0], _parse_qualified_id(r["target"])[0])
+                by_pair.setdefault(key, []).append(r)
+            for (sp_s, sp_t), group in sorted(by_pair.items()):
+                props = ", ".join(sorted({g.get("property", "") for g in group if g.get("property")})[:4])
+                lines.append(
+                    f"<tr><td><code>{sp_s}</code></td><td><code>{sp_t}</code></td>"
+                    f"<td>{len(group)}</td><td>{props}</td></tr>"
+                )
+            lines.append("</table>")
+        lines.append("</div>")
+        return "\n".join(lines)
+
+
+    def _layout_member_groups(self, members, max_per_group=12):
+        """Split a space's views into vertical sub-clusters (reduces node overlap)."""
+        from collections import defaultdict
+
+        by_parent = defaultdict(list)
+        for v in members:
+            parent = self._get_cdm_parent(v) or "Other"
+            by_parent[parent].append(v)
+        groups = []
+        for parent in sorted(by_parent.keys()):
+            ordered = sorted(by_parent[parent], key=lambda x: self._get_label(x, for_diagram=True))
+            for i in range(0, len(ordered), max_per_group):
+                chunk = ordered[i : i + max_per_group]
+                if chunk:
+                    title = parent if len(ordered) <= max_per_group else f"{parent} ({i // max_per_group + 1})"
+                    groups.append((title.replace('"', "'"), chunk))
+        return groups if groups else [("Views", list(members))]
+
+    def _append_vertical_spine(self, lines, node_ids):
+        """Invisible edges to force a vertical node stack (more separation)."""
+        for i in range(len(node_ids) - 1):
+            lines.append(f"    {node_ids[i]} ~~~ {node_ids[i + 1]}")
+
+    def _build_level3_flowchart(self, space_items, domain_rels, cluster_colors, max_edges=120):
+        """Mermaid flowchart for one or more governed spaces (vertical sub-clusters)."""
+        lines = [self._mermaid_spaced_init_line(), "flowchart TB"]
+        all_members = set()
+        for _, members in space_items:
+            all_members.update(members)
+        added = set()
+        space_spine_tips = []
+
+        for sp_idx, (sp, members) in enumerate(space_items):
+            color = cluster_colors[sp_idx % len(cluster_colors)]
+            members_set = set(members)
+            outer_id = f"L3SP{sp_idx}"
+            sp_title = self._space_label(sp).replace('"', "'")
+            lines.append(f'    subgraph {outer_id}["{sp_title}"]')
+            group_tips = []
+            for g_idx, (group_label, group_members) in enumerate(self._layout_member_groups(members)):
+                g_id = f"{outer_id}G{g_idx}"
+                gl = group_label.replace('"', "'")
+                lines.append(f'        subgraph {g_id}["{gl}"]')
+                row_ids = []
+                for v in group_members:
+                    self._register_node(v)
+                    lines.append(f'            {self._mermaid_node_def(v)}')
+                    added.add(v)
+                    row_ids.append(self._diagram_node_id(v))
+                lines.append("        end")
+                self._append_vertical_spine(lines, row_ids)
+                if row_ids:
+                    group_tips.append(row_ids[0])
+            for i in range(len(group_tips) - 1):
+                lines.append(f"        {group_tips[i]} ~~~ {group_tips[i + 1]}")
+            lines.append("    end")
+            if group_tips:
+                space_spine_tips.append(group_tips[0])
+            for v in members:
+                lines.append(
+                    f'    style {self._diagram_node_id(v)} fill:{color},color:#fff,stroke:#fff,stroke-width:2px'
+                )
+
+        for i in range(len(space_spine_tips) - 1):
+            lines.append(f"    {space_spine_tips[i]} ~~~ {space_spine_tips[i + 1]}")
+
+        cdm_targets = {
+            r['target'] for r in domain_rels
+            if r['source'] in all_members
+            and r['target'] not in all_members
+            and r['target'] in self.all_views
+        }
+        cdm_row_ids = []
+        if cdm_targets:
+            if space_spine_tips:
+                lines.append(f"    {space_spine_tips[-1]} ~~~ CDM_SPACER")
+            lines.append('    CDM_SPACER[" "]')
+            lines.append('    subgraph CDMREF["CDM References"]')
+            for cp in sorted(cdm_targets, key=lambda x: self._get_label(x, for_diagram=True)):
+                cp_key = _resolve_view_key(cp, self.all_views)
+                s = self._diagram_node_id(cp_key)
+                self._register_node(cp_key)
+                lbl = self._get_label(cp_key, for_diagram=True).replace('"', "'")
+                lines.append(f'        {s}(["{lbl}"]):::cdm')
+                added.add(cp_key)
+                cdm_row_ids.append(s)
+            lines.append("    end")
+            self._append_vertical_spine(lines, cdm_row_ids)
+
+        space_rels = [r for r in domain_rels if r['source'] in all_members]
+        domain_internal = [r for r in space_rels if r['target'] in all_members]
+        cdm_direct = [r for r in space_rels if r['target'] not in all_members]
+        if len(domain_internal) + len(cdm_direct) > max_edges:
+            budget = max(0, max_edges - len(domain_internal))
+            cdm_direct = cdm_direct[:budget]
+        space_rels_draw = domain_internal + cdm_direct
+        self._append_relation_edges(lines, space_rels_draw, added, max_label=18, with_mult=True)
+
+        lines.append('    classDef cdm fill:#334155,stroke:#64748b,stroke-width:1px,color:#94a3b8,stroke-dasharray:5 5')
+        lines.append('    classDef edgeview fill:#431407,stroke:#fb923c,stroke-width:2px,color:#ffedd5')
+        if cdm_targets:
+            lines.append('    style CDM_SPACER fill:none,stroke:none,color:transparent')
+        lines.extend(self._click_lines(added))
+        return lines, added
+
+    def _build_single_space_diagram(self, sp, members, domain_rels, color):
+        """One governed space — wrapper around _build_level3_flowchart."""
+        cluster_colors = [color]
+        return self._build_level3_flowchart([(sp, members)], domain_rels, cluster_colors)
+
 
     def _get_describable_fringe(self, domain_rels):
         """Low-connected CogniteDescribable implementers that crowd horizontal layouts."""
@@ -1959,7 +2446,7 @@ classDiagram
         """Generate Mermaid click directives for all added views that have detail cards."""
         lines = []
         for v in sorted(added_views):
-            sanitized = self._sanitize(v, record=False)
+            sanitized = self._diagram_node_id(v)
             if v in self.views:
                 # Use sanitized node-id as callback arg — colons in view IDs break Mermaid 11
                 lines.append(f'    click {sanitized} call openModalFromDiagram("{sanitized}")')
@@ -1974,34 +2461,43 @@ classDiagram
         if len(self.domain_views) < 2:
             return ""
 
-        lines = ['flowchart TB']
+        lines = [self._mermaid_spaced_init_line(), 'flowchart TB']
         cluster_colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4']
-        all_rels = self._get_domain_relations(include_cdm_targets=True)
-        domain_rels = self._get_domain_relations(include_cdm_targets=False)
 
-        # CDM parent ghost nodes (implements targets)
         cdm_parents = set()
         for v in self.domain_views:
             parent = self._get_cdm_parent(v)
             if parent:
                 cdm_parents.add(parent)
+        all_rels_incl_ref = self._get_domain_relations(include_cdm_targets=True)
+        for r in all_rels_incl_ref:
+            if r['target'] not in self.domain_views and r['target'] in self.all_views:
+                cdm_parents.add(r['target'])
 
-        sg_lines, inv_lines, spine_anchors, added = self._build_vertical_sections(
-            set(), domain_rels, cdm_ghost_nodes=cdm_parents)
+        sg_lines, inv_lines, added = self._build_space_cluster_sections(
+            set(self.domain_views.keys()), cdm_ghost_nodes=cdm_parents)
         lines.extend(sg_lines)
         lines.extend(inv_lines)
 
-        # All relation edges (domain→domain + domain→ref)
-        all_rels_incl_ref = self._get_domain_relations(include_cdm_targets=True)
-        for src, tgt, prop in self._collect_merged_edges(all_rels_incl_ref, added, max_label=18):
-            lines.append(f'    {self._sanitize(src)} -->|"{prop}"| {self._sanitize(tgt)}')
+        # Level 1 overview: domain-to-domain links only (CDM detail in L2/L3)
+        l1_rels = [
+            r for r in all_rels_incl_ref
+            if r['source'] in self.domain_views and r['target'] in self.domain_views
+        ]
+        self._append_relation_edges(lines, l1_rels, added, max_label=22)
 
         for v in self.domain_views:
             parent = self._get_cdm_parent(v)
-            if parent and parent in added:
-                lines.append(f'    {parent} -.->|implements| {self._sanitize(v)}')
+            if not parent:
+                continue
+            parent_key = _resolve_view_key(parent, self.all_views)
+            p_nid = self._diagram_node_id(parent_key)
+            v_nid = self._diagram_node_id(v)
+            if parent_key in added or p_nid:
+                lines.append(f'    {p_nid} -.->|implements| {v_nid}')
 
         lines.append('    classDef cdm fill:#334155,stroke:#64748b,stroke-width:1px,color:#94a3b8,stroke-dasharray:5 5')
+        lines.append('    classDef edgeview fill:#431407,stroke:#fb923c,stroke-width:2px,color:#ffedd5')
         lines.append(f'    {self._REF_CLASSDEF}')
 
         ref_in_diagram = set()
@@ -2011,7 +2507,7 @@ classDiagram
                 if v in self.ref_views:
                     ref_in_diagram.add(v)
                     continue  # styled by classDef ref below
-                lines.append(f'    style {self._sanitize(v)} fill:{color},color:#fff,stroke:#fff,stroke-width:2px')
+                lines.append(f'    style {self._diagram_node_id(v)} fill:{color},color:#fff,stroke:#fff,stroke-width:2px')
         for v in ref_in_diagram:
             lines.append(f'    class {self._sanitize(v)} ref')
 
@@ -2025,7 +2521,7 @@ classDiagram
         return f'''
             <div class="er-diagram-box">
                 <h3>Level 1: {self.model_name} - Domain Overview</h3>
-                <p class="diagram-desc">All domain views grouped by function. CDM types shown as ghost context.{ref_legend}</p>
+                <p class="diagram-desc">Domain views grouped by governed space with vertical sub-clusters (by CDM anchor). Solid = direct, thick = edge, dashed = reverse. CDM types shown as ghost context.{ref_legend}</p>
                 <pre class="mermaid-source">
 {chr(10).join(lines)}
                 </pre>
@@ -2041,8 +2537,8 @@ classDiagram
         every entity it points TO (outgoing relations), every entity that points
         TO it (incoming relations), and its CDM parent as a ghost node.
         """
-        focus_label = self._get_label(view_id)
-        focus_s    = self._sanitize(view_id)
+        focus_label = self._get_label(view_id, for_diagram=True)
+        focus_s    = self._diagram_node_id(view_id)
 
         outgoing_rels = self.relations_by_source.get(view_id, [])
         incoming_rels = self.relations_by_target.get(view_id, [])
@@ -2075,10 +2571,10 @@ classDiagram
         if out_nodes:
             lines.append('    subgraph OUT["Outgoing relations"]')
             for t in out_nodes:
-                s = self._sanitize(t)
+                s = self._diagram_node_id(t)
                 self._register_node(t)
                 cls = ':::ref' if t in self.ref_views else ''
-                lines.append(f'        {s}["{self._get_label(t)}"]{cls}')
+                lines.append(f'        {s}["{self._get_label(t, for_diagram=True)}"]{cls}')
                 added.add(t)
             lines.append('    end')
 
@@ -2088,16 +2584,16 @@ classDiagram
         if in_nodes:
             lines.append('    subgraph IN["Incoming relations"]')
             for s_id in in_nodes:
-                s = self._sanitize(s_id)
+                s = self._diagram_node_id(s_id)
                 self._register_node(s_id)
                 cls = ':::ref' if s_id in self.ref_views else ''
-                lines.append(f'        {s}["{self._get_label(s_id)}"]{cls}')
+                lines.append(f'        {s}["{self._get_label(s_id, for_diagram=True)}"]{cls}')
                 added.add(s_id)
             lines.append('    end')
 
         # ── CDM parent ghost ──────────────────────────────────────────────────
         if cdm_parent and cdm_parent not in added:
-            lines.append(f'    {cdm_parent}(["{self._get_label(cdm_parent)}"]):::cdm')
+            lines.append(f'    {self._diagram_node_id(cdm_parent)}(["{self._get_label(cdm_parent, for_diagram=True)}"]):::cdm')
             self._register_node(cdm_parent)
             added.add(cdm_parent)
 
@@ -2106,20 +2602,20 @@ classDiagram
 
         # CDM implements
         if cdm_parent and cdm_parent in added:
-            lines.append(f'    {focus_s} -.->|implements| {cdm_parent}')
+            lines.append(f'    {focus_s} -.->|implements| {self._diagram_node_id(cdm_parent)}')
 
         # Outgoing data relations
         for src, tgt, prop, mult in self._collect_merged_edges(
                 outgoing_rels, added, max_label=20, with_mult=True):
             seen_edges.add((src, tgt))
-            lines.append(f'    {focus_s} -->|"{prop} [{mult}]"| {self._sanitize(tgt)}')
+            lines.append(f'    {focus_s} -->|"{self._escape_mermaid_label(prop)} [{mult}]"| {self._diagram_node_id(tgt)}')
 
         # Incoming data relations
         for src, tgt, prop, mult in self._collect_merged_edges(
                 incoming_rels, added, max_label=20, with_mult=True):
             if (src, tgt) not in seen_edges:
                 seen_edges.add((src, tgt))
-                lines.append(f'    {self._sanitize(src)} -->|"{prop} [{mult}]"| {focus_s}')
+                lines.append(f'    {self._diagram_node_id(src)} -->|"{self._escape_mermaid_label(prop)} [{mult}]"| {focus_s}')
 
         # Cross-edges between neighbours
         cross_rels = [r for r in self.relations
@@ -2129,7 +2625,7 @@ classDiagram
                 cross_rels, added, max_label=20, with_mult=True):
             if (src, tgt) not in seen_edges:
                 seen_edges.add((src, tgt))
-                lines.append(f'    {self._sanitize(src)} -->|"{prop} [{mult}]"| {self._sanitize(tgt)}')
+                lines.append(f'    {self._diagram_node_id(src)} -->|"{self._escape_mermaid_label(prop)} [{mult}]"| {self._diagram_node_id(tgt)}')
 
         # ── Styles ────────────────────────────────────────────────────────────
         lines.append('    classDef cdm fill:#1e3a5f,stroke:#3b82f6,stroke-width:1px,color:#93c5fd,stroke-dasharray:5 5')
@@ -2138,11 +2634,11 @@ classDiagram
         for t in out_nodes:
             if t in self.ref_views:
                 continue  # styled by classDef ref
-            lines.append(f'    style {self._sanitize(t)} fill:#10b981,color:#fff,stroke:#fff,stroke-width:2px')
+            lines.append(f'    style {self._diagram_node_id(t)} fill:#10b981,color:#fff,stroke:#fff,stroke-width:2px')
         for s_id in in_nodes:
             if s_id in self.ref_views:
                 continue  # styled by classDef ref
-            lines.append(f'    style {self._sanitize(s_id)} fill:#f59e0b,color:#fff,stroke:#fff,stroke-width:2px')
+            lines.append(f'    style {self._diagram_node_id(s_id)} fill:#f59e0b,color:#fff,stroke:#fff,stroke-width:2px')
         # views that appear in both OUT and IN (non-ref domain): blended purple
         for v in (out_targets & in_sources & domain_ids):
             if v in self.ref_views:
@@ -2154,10 +2650,12 @@ classDiagram
         ref_neighbours = self.ref_views & (set(out_nodes) | set(in_nodes))
         ref_leg = (f' &nbsp;<span style="color:#a78bfa">&#9632;</span> governed-space reference'
                    if ref_neighbours else '')
+        _sp, _bare, _ver = _parse_qualified_id(view_id)
+        _qual = f'{_sp}:{_bare}(version={_ver})' if _sp and _ver else (f'{_sp}:{_bare}' if _sp else view_id)
         return f'''
             <div class="er-diagram-box">
                 <h3>Level 2: {focus_label}</h3>
-                <p class="diagram-desc">
+                <p class="diagram-desc"><code>{_qual}</code><br/>
                     Relations for <strong>{focus_label}</strong>.
                     <span style="color:#3b82f6">■</span> focus &nbsp;
                     <span style="color:#10b981">■</span> outgoing targets &nbsp;
@@ -2196,7 +2694,7 @@ classDiagram
             if use_wrapper:
                 subgraph_lines.append(f'{indent}subgraph {section_id}["{section_label}"]')
             for v in view_list:
-                s = self._sanitize(v)
+                s = self._diagram_node_id(v)
                 self._register_node(v)
                 label = self._get_label(v)
                 node_indent = (indent + '    ') if use_wrapper else indent
@@ -2241,44 +2739,90 @@ classDiagram
         return subgraph_lines, invisible_lines, spine_anchors, added
 
     def level3_relationship_map(self):
-        """Domain-only view: all domain views and their data relations, no CDM nodes."""
+        """Relationship map: combined overview plus per governed space (when multiple spaces)."""
         if len(self.domain_views) < 2:
             return ""
 
-        lines = ['flowchart TB']
         cluster_colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4']
+        all_domain_rels = self._get_domain_relations(include_cdm_targets=True)
+        domain_rels = [
+            r for r in all_domain_rels
+            if r['target'] in self.domain_views
+            or r.get('kind', 'direct') == 'direct'
+        ]
 
-        # Only domain↔domain relations (no CDM targets)
-        domain_rels = self._get_domain_relations(include_cdm_targets=False)
-        describable_fringe = set(self._get_describable_fringe(domain_rels))
+        by_space = defaultdict(list)
+        for v in self.domain_views:
+            sp = getattr(self, 'space_by_view', {}).get(v) or _parse_qualified_id(v)[0] or 'Other'
+            by_space[sp].append(v)
 
-        # No CDM ghost nodes — purely domain
-        sg_lines, inv_lines, _, added = self._build_vertical_sections(
-            describable_fringe, domain_rels, cdm_ghost_nodes=None)
-        lines.extend(sg_lines)
-        lines.extend(inv_lines)
+        space_items = sorted(by_space.items())
+        n_spaces = len(space_items)
+        combined_max_edges = min(2000, 120 * max(1, n_spaces))
+        combined_lines, _ = self._build_level3_flowchart(
+            space_items, domain_rels, cluster_colors, max_edges=combined_max_edges
+        )
+        combined_ok = not self._mermaid_exceeds_text_limit(combined_lines)
+        multi_space = n_spaces > 1
 
-        # Data relation edges — domain to domain only
-        for src, tgt, prop, mult in self._collect_merged_edges(
-                domain_rels, added, max_label=18, with_mult=True):
-            lines.append(f'    {self._sanitize(src)} -->|"{prop} [{mult}]"| {self._sanitize(tgt)}')
+        blocks = [
+            self._cross_space_relations_html(domain_rels),
+        ]
+        if multi_space:
+            blocks.insert(
+                0,
+                '<p class="level-desc">Level 3 provides a <strong>combined overview</strong> (when it fits '
+                f"Mermaid's {self.MERMAID_MAX_TEXT_SIZE:,}-character limit) and <strong>per governed space</strong> "
+                "diagrams for detail. Sub-clusters group views by CDM anchor with vertical spacing.</p>",
+            )
+        else:
+            blocks.insert(
+                0,
+                '<p class="level-desc">Relationship map with vertical sub-clusters by CDM anchor.</p>',
+            )
 
-        # Cluster colour coding (domain-only, no ref ghost nodes here)
-        for idx, (_, cluster_views) in enumerate(self.clusters.items()):
-            color = cluster_colors[idx % len(cluster_colors)]
-            for v in cluster_views:
-                lines.append(f'    style {self._sanitize(v)} fill:{color},color:#fff,stroke:#fff,stroke-width:2px')
-
-        lines.extend(self._click_lines(added))
-
-        return f'''
+        if multi_space and combined_ok:
+            blocks.append(f'''
             <div class="er-diagram-box">
-                <h3>Level 3: {self.model_name} - Domain Relationship Map</h3>
-                <p class="diagram-desc">All domain views and their data relations — no CDM infrastructure shown.</p>
+                <h3>Level 3: {self.model_name} - Complete Relationship Map</h3>
+                <p class="diagram-desc">All {len(self.domain_views)} domain views across {n_spaces} governed spaces (overview)</p>
+                <pre class="mermaid-source">
+{chr(10).join(combined_lines)}
+                </pre>
+            </div>''')
+        elif multi_space and not combined_ok:
+            blocks.append(
+                '<p class="level-desc" style="font-style:italic;">Combined overview omitted '
+                f"(diagram source exceeds {self.MERMAID_MAX_TEXT_SIZE:,} characters). "
+                "Use the per-space diagrams below.</p>"
+            )
+
+        if multi_space:
+            blocks.append('<h4 class="diagram-sublevel" style="margin:1.5rem 0 0.75rem 0;">Per governed space</h4>')
+            for idx, (sp, members) in enumerate(space_items):
+                color = cluster_colors[idx % len(cluster_colors)]
+                lines, _ = self._build_single_space_diagram(sp, members, domain_rels, color)
+                sp_title = self._space_label(sp)
+                blocks.append(f'''
+            <div class="er-diagram-box">
+                <h3>Level 3: {sp_title}</h3>
+                <p class="diagram-desc">{len(members)} views in <code>{sp_title}</code></p>
                 <pre class="mermaid-source">
 {chr(10).join(lines)}
                 </pre>
-            </div>'''
+            </div>''')
+        elif not multi_space:
+            lines = combined_lines
+            sp_title = self._space_label(space_items[0][0])
+            blocks.append(f'''
+            <div class="er-diagram-box">
+                <h3>Level 3: {sp_title}</h3>
+                <p class="diagram-desc">{len(self.domain_views)} views in <code>{sp_title}</code></p>
+                <pre class="mermaid-source">
+{chr(10).join(lines)}
+                </pre>
+            </div>''')
+        return '\n'.join(blocks)
     
     # =========================================================================
     # LEVEL 4: FULL ARCHITECTURE WITH CDM CONTEXT
@@ -2288,6 +2832,8 @@ classDiagram
         """Domain types prominent, full CDM foundation shown with all relation edges."""
         if len(self.domain_views) < 2:
             return ""
+        if len(self.domain_views) > 150:
+            return ('<p style="color:#94a3b8;font-style:italic;padding:1rem;">Level 4 omitted: ' + str(len(self.domain_views)) + ' views exceeds 150-view threshold. Per-category ER diagrams show detail.</p>')
 
         lines = ['flowchart TB']
         cluster_colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4']
@@ -2361,7 +2907,7 @@ classDiagram
                 if v in self.ref_views:
                     ref_in_diagram.add(v)
                     continue  # styled by classDef ref below
-                lines.append(f'    style {self._sanitize(v)} fill:{color},color:#fff,stroke:#fff,stroke-width:2px')
+                lines.append(f'    style {self._diagram_node_id(v)} fill:{color},color:#fff,stroke:#fff,stroke-width:2px')
         for v in ref_in_diagram:
             lines.append(f'    class {self._sanitize(v)} ref')
 
@@ -2387,6 +2933,8 @@ classDiagram
         """All domain views, every data relation, and every CDM implements arrow."""
         if len(self.domain_views) < 2:
             return ""
+        if len(self.domain_views) > 150:
+            return ('<p style="color:#94a3b8;font-style:italic;padding:1rem;">Level 5 omitted: ' + str(len(self.domain_views)) + ' views exceeds 150-view threshold. Per-category ER diagrams show detail.</p>')
 
         lines = ["flowchart TB"]
         cluster_colors = ["#3b82f6","#10b981","#f59e0b","#ef4444","#8b5cf6","#ec4899","#06b6d4"]
@@ -2424,7 +2972,7 @@ classDiagram
         unclustered = [v for v in sorted(self.domain_views.keys()) if v not in added]
         if unclustered:
             for v in unclustered:
-                s = self._sanitize(v)
+                s = self._diagram_node_id(v)
                 self._register_node(v)
                 lines.append(f'    {s}["{self._get_label(v)}"]')
                 added.add(v)
@@ -2444,7 +2992,7 @@ classDiagram
         # Data relation edges (domain→domain + domain→CDM + domain→ref)
         for src, tgt, prop, mult in self._collect_merged_edges(
                 all_rels, added, max_label=15, with_mult=True):
-            lines.append(f'    {self._sanitize(src)} -->|"{prop} [{mult}]"| {self._sanitize(tgt)}')
+            lines.append(f'    {self._diagram_node_id(src)} -->|"{self._escape_mermaid_label(prop)} [{mult}]"| {self._diagram_node_id(tgt)}')
 
         # Implements arrows: every domain view → every CDM type it lists
         for v in self.domain_views:
@@ -2473,7 +3021,7 @@ classDiagram
                     if v in self.ref_views:
                         ref_in_diagram.add(v)
                         continue  # styled by classDef ref below
-                    lines.append(f'    style {self._sanitize(v)} fill:{color},color:#fff,stroke:#fff,stroke-width:2px')
+                    lines.append(f'    style {self._diagram_node_id(v)} fill:{color},color:#fff,stroke:#fff,stroke-width:2px')
         for v in ref_in_diagram:
             lines.append(f'    class {self._sanitize(v)} ref')
 
@@ -2499,6 +3047,7 @@ classDiagram
         """Generate all diagram levels, domain-model-centric."""
         diagrams = []
         
+        diagrams.append(self._er_diagram_legend_html())
         # Level 1: Domain Overview
         diagrams.append('<h2 class="diagram-level">Level 1: Domain Model Overview</h2>')
         diagrams.append('<p class="level-desc">High-level view of domain structure with functional groupings</p>')
@@ -2545,7 +3094,7 @@ classDiagram
         if d:
             diagrams.append(d)
         
-        return '\n'.join(diagrams), self.node_mapping
+        return '\n'.join(diagrams), self.node_mapping, self.node_tooltip_labels
 
 
 def generate_overview_diagram(views, all_views, direct_relations, model_name,
@@ -2572,17 +3121,23 @@ def generate_overview_diagram(views, all_views, direct_relations, model_name,
         # would map every view in the same space to 'sp_ssp_supply_chain_'.
         return re.sub(r'[^a-zA-Z0-9]', '_', s)[:60]
 
-    def get_label(vid):
+    def get_label(vid, for_diagram=False):
         def _clean(s):
             s = re.sub(r'^[a-zA-Z][a-zA-Z0-9_]*:', '', s)
             s = re.sub(r'\s*\(version=[^)]+\)', '', s).strip()
             return s
+        sp, bare, _ = _parse_qualified_id(vid)
+        name = ''
         for store in (views, all_views):
             if vid in store:
                 name = _clean(store[vid].get('display_name') or store[vid].get('name', ''))
                 if name and name != vid:
-                    return name
-        return _clean(vid) or vid
+                    break
+                name = ''
+        name = name or bare or _clean(vid) or vid
+        if for_diagram and sp:
+            return f'{sp}:{name}'
+        return name
     
     def get_cdm_parent(vid):
         view = all_views.get(vid, {})
@@ -2601,36 +3156,27 @@ def generate_overview_diagram(views, all_views, direct_relations, model_name,
     group_colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444',
                     '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16']
 
-    # Group domain views by CDM parent
-    by_parent = defaultdict(list)
+    # Group domain views by governed space (cloud clusters)
+    by_space = defaultdict(list)
     for vid in domain_views:
-        parent = get_cdm_parent(vid)
-        by_parent[parent or 'Other'].append(vid)
+        sp, _, _ = _parse_qualified_id(vid)
+        by_space[sp or 'Other'].append(vid)
 
-    # Sort groups: named CDM parents first (alphabetically), 'Other' last
-    sorted_groups = sorted(
-        (k for k in by_parent if k != 'Other')
-    ) + (['Other'] if 'Other' in by_parent else [])
+    def _ov_space_label(sp):
+        return sp or 'Other'
 
-    # Use Mermaid subgraphs to cluster views by CDM parent.
-    # This gives Mermaid layout hints that produce compact vertical columns
-    # instead of the flat single-row band that hub-and-spoke arrows cause.
-    # Colours cycle per-view (not per-group) so models where most views share
-    # one CDM parent still get a visually varied, colourful diagram.
     color_idx = 0
-    for parent_type in sorted_groups:
-        child_views = by_parent[parent_type]
-        sg_id = f'sg_{sanitize(parent_type)}'
-
-        sg_label = parent_type if parent_type != 'Other' else 'Other'
+    for idx, (sp, child_views) in enumerate(sorted(by_space.items())):
+        sg_id = f'sg_{idx}'
+        sg_label = _ov_space_label(sp)
         content_lines.append(f'    subgraph {sg_id} ["{sg_label}"]')
-
         for vid in sorted(child_views, key=lambda v: get_label(v)):
-            label = get_label(vid)[:22]
+            label = get_label(vid, for_diagram=True)[:28]
             sid = sanitize(vid)
             cls = ':::ref' if vid in ref_ids else ''
             content_lines.append(f'        {sid}["{label}"]{cls}')
             added.add(vid)
+            color_idx += 1
             added.add(sid)
 
         content_lines.append('    end')
@@ -2652,14 +3198,22 @@ def generate_overview_diagram(views, all_views, direct_relations, model_name,
     _ov_groups = {}
     for rel in direct_relations:
         src, tgt = rel["source"], rel["target"]
-        if src in domain_ids_set and tgt in domain_ids_set and src != tgt:
+        if src in domain_ids_set and tgt in domain_ids_set and src != tgt and rel.get('kind','direct') in ('direct','edge','reverse'):
             _ov_groups.setdefault((src, tgt), []).append(rel)
     for (src, tgt), group_rels in _ov_groups.items():
-        if rel_count >= 30:
+        if rel_count >= 60:
             break
+        kind = group_rels[0].get('kind', 'direct')
         props = [r.get("display_name") or r.get("property", "") for r in group_rels]
-        label = (" / ".join(p for p in props if p))[:14]
-        content_lines.append(f'    {sanitize(src)} -->|"{label}"| {sanitize(tgt)}')
+        prefix = '' if kind == 'direct' else f'{kind}: '
+        label = (prefix + ' / '.join(p for p in props if p))[:16]
+        s, t = sanitize(src), sanitize(tgt)
+        if kind == 'edge':
+            content_lines.append(f'    {s} ==>|"{label}"| {t}')
+        elif kind == 'reverse':
+            content_lines.append(f'    {s} -.->|"rev {label}"| {t}')
+        else:
+            content_lines.append(f'    {s} -->|"{label}"| {t}')
         rel_count += 1
 
     content_lines.append('')
@@ -2673,11 +3227,7 @@ def generate_overview_diagram(views, all_views, direct_relations, model_name,
         sid = sanitize(vid)
         ov_node_mapping[sid] = vid
         content_lines.append(f'    click {sid} call openModalFromDiagram("{sid}")')
-    for parent_type in by_parent:
-        if parent_type != 'Other' and parent_type.startswith('Cognite'):
-            parent_sid = sanitize(parent_type)
-            ov_node_mapping[parent_sid] = parent_type
-            content_lines.append(f'    click {parent_sid} call openModalFromDiagram("{parent_sid}")')
+    # CDM parent ghost clicks omitted in space-cluster overview
 
     return (f'''
         <div class="overview-diagram">
@@ -2825,6 +3375,11 @@ def generate_property_table(props, view_id, inheritance_depths, all_views):
         connection = prop.get('connection', 'null')
         is_relation = connection and connection != 'null'
         type_class = 'prop-type-relation' if is_relation else _type_css_class(ptype)
+        conn_lbl = connection_kind_label(connection) if is_relation else ''
+        conn_badge = (
+            f'<span class="conn-badge conn-{conn_lbl.lower()}">{escape_html(conn_lbl)}</span> '
+            if conn_lbl else ''
+        )
         
         # Type column — show display name and externalId for relation targets.
         # Show a space/version badge only when the target belongs to a DIFFERENT space
@@ -2861,11 +3416,11 @@ def generate_property_table(props, view_id, inheritance_depths, all_views):
                                       f'{escape_html(_tspace)}{_vbadge}</span>')
 
             if type_name and type_name != type_id:
-                type_display = (f'&rarr; <span class="type-name">{escape_html(type_name)}</span>'
+                type_display = (f'{conn_badge}&rarr; <span class="type-name">{escape_html(type_name)}</span>'
                                 f'{type_ver_badge}'
                                 f'<br/><span class="type-code">{escape_html(type_id)}</span>')
             else:
-                type_display = f'&rarr; {escape_html(ptype)}'
+                type_display = f'{conn_badge}&rarr; {escape_html(ptype)}'
         else:
             type_display = escape_html(ptype)
         
@@ -2945,7 +3500,7 @@ def generate_property_table(props, view_id, inheritance_depths, all_views):
 
 
 def generate_card(view_id, view_data, icon, cat_class, inheritance_depths, all_views,
-                  view_domains=None, ref_view_ids=None):
+                  view_domains=None, ref_view_ids=None, model_relations=None):
     """Generate HTML card for a view with industry domain tags."""
     props = view_data['properties']
     total_count = len(props)
@@ -2988,27 +3543,48 @@ def generate_card(view_id, view_data, icon, cat_class, inheritance_depths, all_v
     _full_info = all_views.get(view_id, view_data)
     _m_space, _m_ver = _view_space_version(view_id, _full_info)
 
-    # The subtitle uses the bare externalId (the view_id key without any namespace prefix)
-    _, _bare_id, _ = _parse_qualified_id(view_id)
+    # Prefer space/externalId parsed from the canonical view_id key (governed-space qualified).
+    _sp_id, _bare_id, _ver_id = _parse_qualified_id(view_id)
+    if _sp_id:
+        _m_space = _sp_id
+        if _ver_id and not _m_ver:
+            _m_ver = _ver_id
     _bare_id = _bare_id or view_id
 
     if _m_space:
         _vstr = f'(version={_m_ver})' if _m_ver else ''
         qualified_id = f'{_m_space}:{_bare_id}{_vstr}'
+        identity_line = f'{_m_space}:{_bare_id}'
     else:
-        qualified_id = view_id  # fallback if space unknown
+        qualified_id = view_id
+        identity_line = clean_name or view_id
 
-    if clean_name and clean_name != qualified_id:
+    if _m_space:
+        title = (f'<span class="card-name">{escape_html(identity_line)}</span>'
+                 + (f'<span class="view-subtitle">{escape_html(_vstr)}</span>' if _vstr else ''))
+        if clean_name and clean_name != _bare_id:
+            title += f'<span class="view-display-name">{escape_html(clean_name)}</span>'
+    elif clean_name and clean_name != qualified_id:
         title = (f'<span class="card-name">{escape_html(clean_name)}</span>'
                  f'<span class="view-subtitle">{escape_html(qualified_id)}</span>')
     else:
-        # Name same as bare id — show subtitle below in muted style anyway
         title = (f'<span class="card-name">{escape_html(clean_name or view_id)}</span>'
                  + (f'<span class="view-subtitle">{escape_html(qualified_id)}</span>'
                     if qualified_id != (clean_name or view_id) else ''))
 
     # Domain tag removed - standards are used internally for categorization only
     domain_tag = ''
+
+    _role = classify_view_role(view_id, all_views, relations=model_relations, ref_view_ids=ref_view_ids)
+    _role_labels = {
+        'object': ('Object view', 'view-role-object'),
+        'edge': ('Edge type', 'view-role-edge'),
+        'reference': ('Reference type', 'view-role-ref'),
+        'cdm': ('CDM type', 'view-role-cdm'),
+    }
+    _rl, _rc = _role_labels.get(_role, ('Object view', 'view-role-object'))
+    role_badge = f'<span class="view-role-badge {_rc}">{escape_html(_rl)}</span>'
+
     
     _ref_extra = ' ref-card' if (ref_view_ids and view_id in ref_view_ids) else ''
     return f'''
@@ -3016,7 +3592,7 @@ def generate_card(view_id, view_data, icon, cat_class, inheritance_depths, all_v
                     <div class="card-main" onclick="toggleCard(this.parentElement)">
                         <div class="card-header">
                             <div class="card-icon {cat_class}">{icon}</div>
-                            <div><div class="card-title">{title}</div>{domain_tag}</div>
+                            <div><div class="card-title">{title} {role_badge}</div>{domain_tag}</div>
                             <button class="btn-expand" onclick="event.stopPropagation(); openModal('{view_id}')" title="Expand">&#x26F6;</button>
                         </div>
                         <div class="card-description">{escape_html(description)[:150]}{'...' if len(description) > 150 else ''}</div>
@@ -3037,6 +3613,47 @@ def generate_card(view_id, view_data, icon, cat_class, inheritance_depths, all_v
 # =============================================================================
 # CLASS HIERARCHY
 # =============================================================================
+
+
+
+def _resolve_view_key(ref: str, all_views: dict, default_version: str = "v1") -> str:
+    """Map an implements/parent reference to the canonical key in *all_views*."""
+    if not ref:
+        return ref
+    ref = ref.strip()
+    if ref in all_views:
+        return ref
+
+    candidates: list[str] = [ref]
+    if ref.startswith("cdf_cdm:"):
+        stripped = ref[len("cdf_cdm:"):]
+        candidates.extend([stripped, stripped.split("(version=")[0].strip()])
+    if "(version=" in ref:
+        candidates.append(ref[: ref.index("(version=")].strip())
+
+    sp, bare, ver = _parse_qualified_id(ref)
+    if sp and bare:
+        ver = ver or default_version
+        candidates.extend([
+            f"{sp}:{bare}(version={ver})",
+            f"{sp}:{bare}(version=v1)",
+            f"{sp}:{bare}",
+            bare,
+        ])
+        if sp == "cdf_cdm":
+            candidates.append(f"cdf_cdm:{bare}(version={ver})")
+    elif bare and bare.startswith("Cognite"):
+        candidates.extend([bare, f"cdf_cdm:{bare}(version=v1)"])
+
+    seen: set[str] = set()
+    for c in candidates:
+        if not c or c in seen:
+            continue
+        seen.add(c)
+        if c in all_views:
+            return c
+    return ref
+
 
 def generate_class_hierarchy(views, all_views, domain_view_ids, explicit_model_cdm_idm_ids=None):
     """Generate an interactive collapsible class hierarchy tree (HTML string).
@@ -3084,7 +3701,7 @@ def generate_class_hierarchy(views, all_views, domain_view_ids, explicit_model_c
         for raw in impl.split(','):
             p = _norm_impl(raw)
             if p and p not in idm_plain_dupes:
-                all_p.append(p)
+                all_p.append(_resolve_view_key(p, all_views))
         if len(all_p) <= 1:
             return all_p
 
@@ -3110,7 +3727,8 @@ def generate_class_hierarchy(views, all_views, domain_view_ids, explicit_model_c
         if vid in idm_plain_dupes:
             continue  # use only the cdf_idm: canonical key
         for parent in _direct_parents(vid):
-            children_map[parent].append(vid)
+            pk = _resolve_view_key(parent, all_views)
+            children_map[pk].append(vid)
             has_parent.add(vid)
 
     # True CDM types: start with 'Cognite' but are NOT IDM plain-name duplicates
@@ -3136,9 +3754,10 @@ def generate_class_hierarchy(views, all_views, domain_view_ids, explicit_model_c
             parent = _norm_impl(raw)
             if not parent or parent in idm_plain_dupes:
                 continue
-            if parent in cdm_ids or parent in idm_ids:
-                used_cdm_idm.add(parent)
-            _collect_ancestors(parent, _seen)
+            pk = _resolve_view_key(parent, all_views)
+            if pk in cdm_ids or pk in idm_ids:
+                used_cdm_idm.add(pk)
+            _collect_ancestors(pk, _seen)
 
     for vid in domain_ids:
         _collect_ancestors(vid)
@@ -3291,7 +3910,7 @@ def generate_html(model_name, space, description, views, all_views, inheritance_
                 cat_class = f'cat-{cat.replace("_", "-")}'
                 cards.append(generate_card(view_id, views[view_id], icon, cat_class,
                                            inheritance_depths, all_views, view_domains,
-                                           ref_view_ids=ref_view_ids))
+                                           ref_view_ids=ref_view_ids, model_relations=direct_relations))
         sections[cat] = '\n'.join(cards)
     
     total_props = sum(len(v.get('properties', [])) for v in views.values())
@@ -3299,19 +3918,26 @@ def generate_html(model_name, space, description, views, all_views, inheritance_
     total_relations = len(direct_relations)
     
     # Generate diagrams
+    _diagram_domain_ids = {
+        k for k in domain_view_ids
+        if k.startswith('totalenergies_') or (
+            ':' in k and not k.startswith('cdf_') and k not in ref_view_ids
+        )
+    }
     diagram_gen = UMLDiagramGenerator(views, all_views, direct_relations, model_name,
-                                      domain_view_ids=domain_view_ids,
+                                      domain_view_ids=_diagram_domain_ids,
                                       ref_view_ids=ref_view_ids)
-    er_diagrams, node_mapping = diagram_gen.generate_all()
+    er_diagrams, node_mapping, node_tooltip_labels = diagram_gen.generate_all()
     overview_diagram, ov_node_mapping = generate_overview_diagram(
         views, all_views, direct_relations, model_name,
-        domain_view_ids=domain_view_ids, ref_view_ids=ref_view_ids)
+        domain_view_ids=_diagram_domain_ids, ref_view_ids=ref_view_ids)
     # Merge overview node mapping so openModalFromDiagram can resolve sanitized IDs
     node_mapping.update(ov_node_mapping)
 
     # Convert node mapping to JavaScript
     import json
     node_mapping_js = json.dumps(node_mapping)
+    node_tooltip_labels_js = json.dumps(node_tooltip_labels)
 
     # Generate class hierarchy
     hierarchy_html = generate_class_hierarchy(views, all_views, domain_view_ids,
@@ -3401,6 +4027,7 @@ def generate_html(model_name, space, description, views, all_views, inheritance_
                 'viewPropertyName': view_prop_name,  # View Property display name
                 'containerProperty': container_prop,  # Container Property externalId
                 'containerPropertyName': container_prop_name,  # Container Property display name
+                'trueSource': prop.get('true_source', ''),  # Actual container (e.g. CogniteDescribable)
                 'type': prop_type,  # Target type (externalId)
                 'typeDisplay': target_display,  # Target type display name
                 'isRelation': bool(prop.get('connection') and prop.get('connection') != 'null'),
@@ -3463,7 +4090,7 @@ def generate_html(model_name, space, description, views, all_views, inheritance_
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{model_name} Documentation</title>
-    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@11.15.0/dist/mermaid.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
     <style>
         :root {{
@@ -3595,6 +4222,12 @@ def generate_html(model_name, space, description, views, all_views, inheritance_
             position: relative;
             flex: 1;
         }}
+        .search-box-view {{
+            flex: 2;
+        }}
+        .search-box-prop {{
+            flex: 1.5;
+        }}
         .search-box-inner {{
             display: flex;
             flex-direction: column;
@@ -3604,6 +4237,12 @@ def generate_html(model_name, space, description, views, all_views, inheritance_
             border: 1px solid var(--border-color);
             border-radius: 8px;
             min-width: 200px;
+        }}
+        .search-box-view .search-box-inner {{
+            min-width: 400px;
+        }}
+        .search-box-prop .search-box-inner {{
+            min-width: 300px;
         }}
         .search-box-label {{
             font-size: 0.65rem;
@@ -3801,6 +4440,12 @@ def generate_html(model_name, space, description, views, all_views, inheritance_
         }}
         .card-title {{ font-weight: 600; font-size: 0.9rem; word-break: break-word; }}
         .card-name {{ font-weight: 700; font-size: 0.95rem; color: var(--text-primary); display: block; }}
+        .view-display-name {{
+            display: block;
+            font-size: 0.75rem;
+            color: #94a3b8;
+            margin-top: 0.15rem;
+        }}
         .view-subtitle {{ display: block; font-size: 0.68rem; color: var(--text-muted); font-family: 'Consolas', monospace; margin-top: 0.1rem; opacity: 0.85; }}
         .view-code {{ font-size: 0.7rem; color: var(--text-muted); font-weight: normal; }}
         
@@ -3946,16 +4591,68 @@ def generate_html(model_name, space, description, views, all_views, inheritance_
         }}
         .er-diagram-box h3 {{ margin-bottom: 0.25rem; color: var(--text-primary); font-size: 1.1rem; }}
         .diagram-desc {{ color: var(--text-muted); font-size: 0.85rem; margin-bottom: 1rem; }}
+        .diagram-sublevel {{ color: var(--text-primary); font-size: 1rem; font-weight: 600; }}
+        #diagram-node-tooltip {{
+            display: none;
+            position: fixed;
+            z-index: 10050;
+            max-width: 28rem;
+            padding: 0.4rem 0.65rem;
+            font-size: 0.85rem;
+            line-height: 1.35;
+            color: var(--text-primary);
+            background: var(--bg-card);
+            border: 1px solid var(--accent-gold);
+            border-radius: 6px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.45);
+            pointer-events: none;
+            font-family: 'Consolas', 'Segoe UI', monospace;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }}
+        .conn-badge {{
+            display: inline-block;
+            font-size: 0.65rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            padding: 0.1rem 0.35rem;
+            border-radius: 3px;
+            margin-right: 0.25rem;
+            vertical-align: middle;
+        }}
+        .conn-direct {{ background: #1e3a5f; color: #93c5fd; }}
+        .conn-edge {{ background: #431407; color: #fdba74; }}
+        .conn-reverse {{ background: #312e81; color: #c4b5fd; }}
+        .view-role-badge {{
+            display: inline-block;
+            font-size: 0.62rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            padding: 0.12rem 0.4rem;
+            border-radius: 4px;
+            margin-left: 0.35rem;
+            vertical-align: middle;
+        }}
+        .view-role-object {{ background: #1e3a5f; color: #93c5fd; }}
+        .view-role-edge {{ background: #431407; color: #fdba74; }}
+        .view-role-ref {{ background: #4c1d95; color: #ddd6fe; }}
+        .view-role-cdm {{ background: #334155; color: #94a3b8; }}
+
         
         .mermaid-source {{ display: none; }}
         .mermaid-rendered {{ 
             text-align: center; 
             background: var(--bg-primary); 
             border-radius: 6px; 
-            padding: 0.5rem;
-            overflow: hidden;
-            height: 650px;
+            padding: 1rem;
+            overflow: auto;
+            min-height: 720px;
+            height: auto;
+            max-height: 1200px;
             position: relative;
+            margin-bottom: 0.5rem;
         }}
         .mermaid-rendered svg {{ 
             display: block;
@@ -4291,7 +4988,7 @@ def generate_html(model_name, space, description, views, all_views, inheritance_
             <div class="stat-label">Direct Relations</div>
         </div>
         <div class="search-dual">
-            <div class="search-box">
+            <div class="search-box search-box-view">
                 <div class="search-box-inner">
                     <span class="search-box-label">Search View Types</span>
                     <input type="text" class="search-input" id="viewSearchInput" placeholder="e.g. Asset, Equipment..." autocomplete="off">
@@ -4299,7 +4996,7 @@ def generate_html(model_name, space, description, views, all_views, inheritance_
                 </div>
                 <div class="search-results" id="viewSearchResults"></div>
             </div>
-            <div class="search-box">
+            <div class="search-box search-box-prop">
                 <div class="search-box-inner">
                     <span class="search-box-label">Search Properties</span>
                     <input type="text" class="search-input" id="propSearchInput" placeholder="e.g. name, description..." autocomplete="off">
@@ -4365,11 +5062,14 @@ def generate_html(model_name, space, description, views, all_views, inheritance_
     <script>
         // Node ID to View ID mapping for clickable diagrams
         var nodeMapping = {node_mapping_js};
+        var nodeTooltipLabels = {node_tooltip_labels_js};
         var hierExtraData = {hier_extra_js};
         
         mermaid.initialize({{ 
             startOnLoad: false,
             securityLevel: 'loose',
+            maxTextSize: 500000,
+            maxEdges: 10000,
             theme: 'dark',
             themeVariables: {{
                 primaryColor: '#3b82f6',
@@ -4390,8 +5090,8 @@ def generate_html(model_name, space, description, views, all_views, inheritance_
                 classText: '#f8fafc'
             }},
             flowchart: {{
-                nodeSpacing: 12,
-                rankSpacing: 22,
+                nodeSpacing: 40,
+                rankSpacing: 60,
                 curve: 'basis',
                 htmlLabels: true,
                 useMaxWidth: true,
@@ -4399,6 +5099,59 @@ def generate_html(model_name, space, description, views, all_views, inheritance_
             }}
         }});
         
+        // ── Node hover labels (readable when diagram is zoomed out) ─────────────
+        var _diagramTooltipEl = null;
+        function getDiagramTooltipEl() {{
+            if (!_diagramTooltipEl) {{
+                _diagramTooltipEl = document.createElement('div');
+                _diagramTooltipEl.id = 'diagram-node-tooltip';
+                document.body.appendChild(_diagramTooltipEl);
+            }}
+            return _diagramTooltipEl;
+        }}
+        function showDiagramNodeTooltip(text, evt) {{
+            if (!text) return;
+            var tip = getDiagramTooltipEl();
+            tip.textContent = text;
+            tip.style.display = 'block';
+            var x = (evt.clientX || 0) + 12;
+            var y = (evt.clientY || 0) + 12;
+            tip.style.left = x + 'px';
+            tip.style.top = y + 'px';
+            requestAnimationFrame(function() {{
+                var r = tip.getBoundingClientRect();
+                if (r.right > window.innerWidth - 8) {{
+                    tip.style.left = Math.max(8, x - r.width - 24) + 'px';
+                }}
+                if (r.bottom > window.innerHeight - 8) {{
+                    tip.style.top = Math.max(8, y - r.height - 24) + 'px';
+                }}
+            }});
+        }}
+        function hideDiagramNodeTooltip() {{
+            if (_diagramTooltipEl) _diagramTooltipEl.style.display = 'none';
+        }}
+        function wireNodeTooltips(nodeMap) {{
+            if (!nodeTooltipLabels) return;
+            Object.keys(nodeMap).forEach(function(mId) {{
+                var entry = nodeMap[mId];
+                if (!entry || !entry.hitEl) return;
+                var text = nodeTooltipLabels[mId];
+                if (!text) return;
+                entry.hitEl.addEventListener('mouseenter', function(e) {{
+                    showDiagramNodeTooltip(text, e);
+                }});
+                entry.hitEl.addEventListener('mousemove', function(e) {{
+                    if (_diagramTooltipEl && _diagramTooltipEl.style.display === 'block') {{
+                        showDiagramNodeTooltip(text, e);
+                    }}
+                }});
+                entry.hitEl.addEventListener('mouseleave', function() {{
+                    hideDiagramNodeTooltip();
+                }});
+            }});
+        }}
+
         // ── Hover edge highlighting ───────────────────────────────────────────
         // Strategy:
         //   FIRST call (inline diagram): geometric matching → annotate every edge
@@ -4448,6 +5201,7 @@ def generate_html(model_name, space, description, views, all_views, inheritance_
             }});
             var nodeKeys = Object.keys(nodeMap);
             if (!nodeKeys.length) {{ console.debug('[EdgeHL] no nodes found'); return; }}
+            wireNodeTooltips(nodeMap);
 
             // ── wire hover handlers (shared by both modes) ──────────────────
             function wireHovers(nodeEdgeMap, allEdgeGroups) {{
@@ -5272,6 +6026,7 @@ def generate_html(model_name, space, description, views, all_views, inheritance_
                             viewPropertyName: prop.viewPropertyName,
                             containerProperty: prop.containerProperty,
                             containerPropertyName: prop.containerPropertyName,
+                            trueSource: prop.trueSource,
                             propertyType: prop.type,
                             propertyTypeDisplay: prop.typeDisplay,
                             isRelation: prop.isRelation,
@@ -5359,11 +6114,11 @@ def generate_html(model_name, space, description, views, all_views, inheritance_
                 html += '</div>';
                 if (r.containerProperty) {{
                     html += '<div class="search-result-container">';
-                    html += '<span style="opacity:0.6">Container: </span>';
-                    if (r.containerPropertyName && r.containerPropertyName !== r.containerProperty) {{
-                        html += highlightMatch(r.containerPropertyName, query) + ' <span style="opacity:0.6">(' + highlightMatch(r.containerProperty, query) + ')</span>';
+                    if (r.trueSource) {{
+                        html += '<span style="opacity:0.6">Container: </span><span style="color:var(--accent-blue)">' + escapeHtml(r.trueSource) + '</span>';
+                        html += '<span style="opacity:0.5"> &bull; prop: </span>' + highlightMatch(r.containerProperty, query);
                     }} else {{
-                        html += highlightMatch(r.containerProperty, query);
+                        html += '<span style="opacity:0.6">Container prop: </span>' + highlightMatch(r.containerProperty, query);
                     }}
                     html += '</div>';
                 }}
@@ -5511,10 +6266,11 @@ def generate_html(model_name, space, description, views, all_views, inheritance_
                             results.push({{
                                 viewId: viewId,
                                 viewDisplayName: searchData[viewId].displayName,
-                                viewProperty: prop.name,
-                                viewPropertyName: prop.displayName,
+                                viewProperty: prop.viewProperty || prop.name,
+                                viewPropertyName: prop.viewPropertyName || prop.displayName || '',
                                 containerProperty: prop.containerProperty,
                                 containerPropertyName: prop.containerPropertyName,
+                                trueSource: prop.trueSource,
                                 propertyType: prop.type,
                                 propertyTypeDisplay: prop.typeDisplay,
                                 isRelation: prop.isRelation,
@@ -5970,7 +6726,10 @@ def run_generation(input_path, output_path, cdm_path=None, idm_path=None,
         f'{s}:' for s in _governed_list
         if s not in _SYSTEM_SPACES and s != _model_space_early
     )
-    _all_domain_raw = {k for k in all_views.keys() if not k.startswith('Cognite')}
+    _all_domain_raw = {k for k in all_views.keys()
+                       if not k.startswith('Cognite')
+                       and not k.startswith('cdf_cdm:')
+                       and not k.startswith('cdf_idm:')}
     if _ref_space_prefixes_early:
         domain_view_ids = {k for k in _all_domain_raw
                            if not k.startswith(_ref_space_prefixes_early)}
@@ -6241,7 +7000,9 @@ def run_generation(input_path, output_path, cdm_path=None, idm_path=None,
             'inherited_property_count': len(props) - own,
         }
 
+    direct_relations = normalize_model_relations(direct_relations, all_views)
     direct_relations = augment_relations_with_inherited_core(views, all_views, direct_relations)
+    direct_relations = normalize_model_relations(direct_relations, all_views)
     print(f"  Relations (with inherited core): {len(direct_relations)}")
 
     print("\nCategorizing by industry domain...")

@@ -1,15 +1,21 @@
 # html-doc-plugin
 
 NEAT write plugin that generates a self-contained, interactive HTML documentation
-file from any loaded NEAT physical data model.
+file from any loaded NEAT physical data model (v9 generator).
 
 ---
 
 ## Install
 
-Install in editable mode from the local folder:
+```bash
+# From this repository (stable path at repo root)
+pip install -e html-doc-plugin
 
-    pip install -e path/to/html-doc-plugin
+# Or from the distributable zip
+# unzip html-doc-plugin.zip && pip install -e html-doc-plugin
+```
+
+Requires `cognite-neat>=0.123.4` and `openpyxl>=3.0`.
 
 ---
 
@@ -17,147 +23,101 @@ Install in editable mode from the local folder:
 
 ### Via the NEAT plugin framework (recommended)
 
-Install the package and NEAT auto-discovers the plugin through the entry-point
-cognite.neat.plugin.data_model.file_writers:
+```python
+from cognite.neat import NeatSession, get_cognite_client
 
-    from cognite.neat import NeatSession, get_cognite_client
+client = get_cognite_client(".env")
+neat = NeatSession(client)
 
-    client = get_cognite_client('.env')
-    neat = NeatSession(client)
+neat.physical_data_model.read.cdf("my_space", "my_model", "v1")
+neat.physical_data_model.write.html_doc("docs/model.html")
+# prints: Generated: .../docs/model.html
+```
 
-    neat.physical_data_model.read.cdf('my_space', 'my_model', 'v1')
-    neat.physical_data_model.write.html_doc('docs/model.html')
-    # prints: Generated: .../docs/model.html
+Optional kwargs: `cdm=`, `idm=`, `ref_paths=`, `env_path=`, `verbose=True`.
 
-Optional kwargs: cdm=, idm=, erbose=True.
+### Via attach_plugin() (session-aware helper)
 
-### Via attach_plugin() (session-aware, legacy helper)
+```python
+from cognite.neat import NeatSession, get_cognite_client
+from html_doc import attach_plugin
 
-ttach_plugin() monkey-patches the write object and captures the live
-NeatSession so CDM and IDM are fetched from CDF automatically:
+client = get_cognite_client(".env")
+neat = attach_plugin(NeatSession(client))
 
-    from cognite.neat import NeatSession, get_cognite_client
-    from html_doc import attach_plugin
-
-    client = get_cognite_client('.env')
-    neat = attach_plugin(NeatSession(client))
-
-    neat.physical_data_model.read.cdf('my_space', 'my_model', 'v1')
-    neat.physical_data_model.write.html_doc('docs/model.html')
-    # prints: Generated: .../docs/model.html
+neat.physical_data_model.read.cdf("my_space", "my_model", "v1")
+neat.physical_data_model.write.html_doc("docs/model.html")
+```
 
 ---
 
 ## What the plugin generates
 
-The output is a **single self-contained HTML file** that opens in any browser
-with no server or extra files needed.
+Single self-contained **HTML** file (no server). Highlights in **v9**:
 
-### Header
+### View cards and properties
 
-- **Title**: the data model name from the metadata `name` field.
-- **Subtitle**: the canonical CDF identifier in the format
-  `space:externalId (version=version)` matching what is stored in CDF.
+- Full `space:externalId(version=...)` subtitle on every view type.
+- **View role badge**: Object view, Edge type, Reference type, or CDM type.
+- Property tables label connection kind: **Direct**, **Edge**, **Reverse** badges.
+- Inherited vs own properties; cross-space value types show target space when needed.
 
-### Statistics bar
-
-Total view types, properties, relations, and industry domains in the model.
-
-### Domain sections
-
-Views are automatically categorised into industry domains based on ISO 14224,
-CFIHOS, OSDU, SAP APM, and ISO 15288 naming conventions, for example
-*Activities and Work Management*, *Location and Geography*, and
-*Instrumentation and Control*. Each domain section contains one card per view type.
-
-### View type cards
-
-Each card shows:
-
-- Display name, description, and which CDM type it implements (e.g. CogniteAsset).
-- Own and inherited property counts.
-- Full property table: own properties plus inherited properties with source indicated.
-- Collapsible by default; expand individually or with Expand All / Collapse All.
-
-### ER diagrams - five levels
+### ER diagrams (five levels)
 
 | Level | Name | What it shows |
 |-------|------|---------------|
-| 1 | Domain Overview | All domain entities grouped by cluster, coloured by domain |
-| 2 | Entity Focus | One diagram per entity: the entity, all direct incoming/outgoing relations, and its CDM parent |
-| 3 | Domain Relationship Map | All domain entities and every data relation between them, no CDM nodes |
-| 4 | Full Architecture with CDM | Domain entities plus the Cognite Core Data Model foundation they extend |
-| 5 | All Relations incl. CDM Implements | Every domain entity, every data relation, and every implements arrow to a CDM type |
+| 1 | Domain Overview | Domain entities by industry cluster; **vertical layout** with per-space sub-clusters when governed spaces are present |
+| 2 | Entity Focus | One diagram per entity with direct relations and CDM parent |
+| 3 | Domain Relationship Map | Domain entities and data relations; **smart layout** (see below) |
+| 4 | Full Architecture with CDM | Domain entities plus CDM foundation types |
+| 5 | All Relations incl. CDM Implements | Data relations and implements links to CDM |
+
+**Level 1 and Level 3 layout (v9):**
+
+- Increased vertical spacing (`nodeSpacing` / `rankSpacing`) for readability.
+- **Governed / multi-space models**: views grouped into per-space subgraphs with invisible spine links for consistent vertical flow.
+- **Level 3**: If the combined diagram is under Mermaid's **500,000 character** limit, a single overview is shown. If it would exceed the limit, **per-space diagrams** are generated instead. When the combined diagram fits **and** multiple spaces exist, both the **overview** and **per-space** diagrams are included.
+
+**Cross-space relations report:**
+
+- Table of direct relations whose source and target live in **different spaces**, with counts per space pair (for governed multi-space models).
+
+**Diagram legend:**
+
+- Node shapes: Object (rectangle), Edge type (rounded), Reference (dashed purple), CDM ghost (slate).
+- Line styles: Direct, Edge, Reverse relations.
 
 **Diagram interactivity:**
 
-- Pan and zoom inside every diagram.
-- Pop out any diagram into a full-screen overlay.
-- Click any entity box to open its detail card.
-- Hover over any entity box to highlight all connected relation lines;
-  other lines are dimmed. Works in both inline and pop-out views.
+- Pan and zoom; full-screen pop-out.
+- Click a node to open the view card.
+- **Hover** a node to see view name and description tooltip; unrelated edges dim.
 
-### Search and theming
+### Entity Hierarchy, search, theming
 
-- A live search bar filters view cards across all domains instantly.
-- A toggle in the header switches between dark and light mode; all diagrams
-  re-render with appropriate colours.
+- Collapsible CDM / IDM / domain tree with filter.
+- Live search across view cards.
+- Dark / light mode toggle.
 
 ---
 
-## How CDM context is resolved
+## Governed spaces and reference models
 
-The Cognite Core Data Model (CDM) is needed for Level 4 and Level 5 diagrams,
-the Entity Hierarchy, and for the implements annotation on each view card.
-The plugin resolves it in this priority order:
+Models with `governedSpaces` metadata (comma-separated CDF spaces) load additional reference YAML per space. Resolution order:
 
-**1. Explicit override**
+1. **`ref_paths=`** explicit YAML list
+2. **Auto-discovery**: `governed_space_{space}.yaml` next to the input file (legacy: `{space}.yaml`)
+3. **CDF fetch** via live `NeatSession` or `--env` / `env_path=`
 
-Pass `cdm=path/to/CogniteCore.yaml` to use a specific file and skip all auto-detection.
-
-**2. Live fetch from CDF (default, recommended)**
-
-A separate, temporary NeatSession is created using the same CDF credentials.
-It reads `cdf_cdm:CogniteCore v1` from CDF and exports it to a temporary YAML
-file that is deleted after the HTML is written.
-The loaded model in the calling session is never modified.
-If the fetch fails for any reason (no connectivity, no permission) the plugin
-silently falls through to the next option.
-
-**3. Bundled fallback**
-
-A copy of `CogniteCore.yaml` is shipped inside the plugin package and is used
-when neither an explicit path nor a live fetch is available.
-
-Note: the bundled fallback may lag behind the live CDF version.
-Update it by copying a fresh `CogniteCore.yaml` into the `html_doc/` folder
-and reinstalling with `pip install -e .`
+Reference views appear in domain sections and ER diagrams (purple styling) when they match a domain category.
 
 ---
 
-## How IDM context is resolved
+## CDM and IDM context
 
-The Cognite Industrial Data Model (IDM, `CogniteProcessIndustries`) adds
-industry-specific entity types on top of CDM and is used to populate the
-*IDM Industry Types* tab and the Entity Hierarchy.
-The plugin resolves it in the same priority order as CDM:
+Resolved in priority order: explicit path -> live CDF fetch -> bundled `CogniteCore.yaml` / `CogniteProcessIndustries.yaml` in the package.
 
-**1. Explicit override**
-
-Pass `idm=path/to/CogniteProcessIndustries.yaml` to use a specific file.
-
-**2. Live fetch from CDF (default, recommended)**
-
-A separate, temporary NeatSession fetches `cdf_idm:CogniteProcessIndustries v1`
-from CDF into a temporary YAML that is deleted after generation.
-
-**3. Bundled fallback**
-
-A copy of `CogniteProcessIndustries.yaml` is shipped inside the plugin package.
-
-Note: the bundled fallback may lag behind the live CDF version.
-Update it by copying a fresh `CogniteProcessIndustries.yaml` into the `browse_model/`
-folder and reinstalling with `pip install -e .`
+Update bundled files by copying fresh YAML into `html_doc/` and reinstalling: `pip install -e .`
 
 ---
 
@@ -165,77 +125,82 @@ folder and reinstalling with `pip install -e .`
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| io | str or Path | required | Output path for the .html file |
-| cdm | str or Path or None | None | Explicit CDM YAML path (`CogniteCore.yaml`), skips auto-fetch |
-| idm | str or Path or None | None | Explicit IDM YAML path (`CogniteProcessIndustries.yaml`), skips auto-fetch |
-| script_path | str or Path or None | None | Override path to generate_documentation_v7.py |
-| verbose | bool | False | Print detailed progress; quiet by default |
+| `io` | str or Path | required | Output `.html` path |
+| `cdm` | str or Path or None | None | Explicit CDM YAML; skips auto-fetch |
+| `idm` | str or Path or None | None | Explicit IDM YAML |
+| `ref_paths` | list or None | None | Reference model YAML paths for governed spaces |
+| `env_path` | str or Path or None | None | `.env` for CDF when no live session |
+| `script_path` | str or Path or None | None | Override `generate_documentation_v9.py` |
+| `version_override` | str or None | None | Toolkit `{{version}}` placeholder (e.g. `v1.0.0`) |
+| `verbose` | bool | False | Progress messages |
 
 ---
 
 ## How it works internally
 
-### Plugin framework path (HtmlDocPlugin / HtmlDocExporter)
+1. NEAT discovers `HtmlDocPlugin` via `cognite.neat.plugin.data_model.file_writers`.
+2. Model is exported to temporary YAML (`DMSTableYamlExporter`).
+3. Bundled **`generate_documentation_v9.py`** runs (or script from `NEAT_HTML_DOC_SCRIPT` / `script_path=`).
+4. CDM, IDM, and reference models are resolved; temporaries are deleted.
 
-1. NEAT discovers HtmlDocPlugin via the cognite.neat.plugin.data_model.file_writers
-   entry-point when the package is installed.
-2. When write.html_doc(io, **kwargs) is called, NEAT calls
-   HtmlDocPlugin.configure(io=..., **kwargs), which returns a
-   HtmlDocExporter instance.
-3. NEAT calls HtmlDocExporter.export_to_file(data_model, file_path),
-   passing the loaded RequestSchema and the output path.
-4. export_to_file converts RequestSchema to a temporary YAML using
-   DMSTableYamlExporter, resolves CDM and IDM, and calls
-un_generation().
-5. All temporary files are deleted.
+Script resolution order:
 
-### Script resolution order for generate_documentation_v7.py
-
-1. script_path= argument
-2. NEAT_HTML_DOC_SCRIPT environment variable
-3. Bundled copy inside the plugin package (primary)
-4. ../NEAT_PROJECTS/ relative to the plugin folder
-5. Current working directory
-6. C:/neat/NEAT_PROJECTS/ as last resort
+1. `script_path=` argument
+2. `NEAT_HTML_DOC_SCRIPT` environment variable
+3. **Bundled** `html_doc/generate_documentation_v9.py` (primary)
+4. `html-doc/html_doc/generate_documentation_v9.py` or `NEAT_PROJECTS/...` on disk
+5. v8 / v7 fallbacks if present
 
 ---
 
-## Running the generator as a standalone script
+## Standalone CLI (without NEAT session)
 
-`generate_documentation_v7.py` can also be invoked directly from the command
-line without installing the plugin or connecting to CDF.  This is useful for
-quickly generating docs from local files.
+```bash
+python generate_documentation_v9.py <input> [options]
+```
 
-### Usage
-
-    python generate_documentation_v7.py <input_file> [options]
-
-### Arguments
+`<input>`: NEAT `.yaml` / `.xlsx`, Toolkit `*.DataModel.yaml`, or module directory.
 
 | Argument | Description |
 |----------|-------------|
-| `input_file` | Path to the NEAT data model file (`.yaml`, `.yml`, or `.xlsx`) |
-| `--cdm PATH` | Path to a local `CogniteCore.yaml` (Cognite Core Data Model). If omitted, a bundled copy is used. |
-| `--idm PATH` | Path to a local `CogniteProcessIndustries.yaml` (Cognite Industrial Data Model). If omitted, a bundled copy is used. |
-| `-o / --output PATH` | Output HTML file path. Defaults to `<input>.html` in the same folder. |
+| `--cdm PATH` | CogniteCore.yaml |
+| `--idm PATH` | CogniteProcessIndustries.yaml |
+| `--ref YAML` | Reference model YAML (repeatable) |
+| `--env ENV_FILE` | CDF credentials for governed-space fetch |
+| `--version VERSION` | Toolkit template version when not in config |
+| `--config CONFIG_YAML` | Toolkit config with `variables.version` |
+| `-o / --output PATH` | Output HTML path |
 
-### Examples
+Examples:
 
-Generate docs using only the input model (CDM and IDM resolved from bundled files):
+```bash
+python generate_documentation_v9.py my_model.yaml --cdm html_doc/CogniteCore.yaml -o docs/model.html
 
-    python generate_documentation_v7.py my_model.yaml
+python generate_documentation_v9.py path/to/ssp_supply_chain --version v1.0.0 --env .env -o isc.html
+```
 
-Provide explicit CDM and IDM files:
+---
 
-    python generate_documentation_v7.py my_model.yaml \
-        --cdm path/to/CogniteCore.yaml \
-        --idm path/to/CogniteProcessIndustries.yaml
+## Package contents
 
-Specify a custom output path:
+```
+html-doc-plugin/
+├── pyproject.toml
+├── README.md
+└── html_doc/
+    ├── plugin.py              # NEAT entry point
+    ├── _exporter.py           # HtmlDocExporter
+    ├── _writer.py             # attach_plugin + script resolution
+    ├── generate_documentation_v9.py
+    ├── CogniteCore.yaml       # bundled CDM fallback
+    └── CogniteProcessIndustries.yaml
+```
 
-    python generate_documentation_v7.py my_model.xlsx -o docs/my_model.html
+---
 
-On Windows (PowerShell), use `` ` `` for line continuation or write the
-command on a single line:
+## Version history
 
-    python generate_documentation_v7.py my_model.yaml --cdm CogniteCore.yaml --idm CogniteProcessIndustries.yaml -o docs/output.html
+| Version | Generator | Notes |
+|---------|-----------|-------|
+| 0.2.x | v9 | L1/L3 layout, governed-space clusters, conditional L3 split, cross-space report, legend, hover tooltips, view/connection badges |
+| 0.1.x | v8 | Initial plugin packaging |
