@@ -59,6 +59,12 @@ Single self-contained **HTML** file (no server). Highlights in **v9**:
 
 - Full `space:externalId(version=...)` subtitle on every view type.
 - **View role badge**: Object view, Edge type, Reference type, or CDM type.
+  - **Edge type** is assigned when the view’s **own** properties use a container with
+    `Used For: edge` in the model’s **Containers** section (for example `TagDocRelation`).
+    Object views that only appear as the start or end of an edge relation on another view
+    (for example `DOCUMENT`) stay **Object view**, not Edge type.
+  - If container metadata is missing, a view is treated as Edge type only when it is named
+    as `edgeSource=…` on another view’s edge property—not when it is merely a relation target.
 - Property tables label connection kind: **Direct**, **Edge**, **Reverse** badges.
 - Inherited vs own properties; cross-space value types show target space when needed.
 
@@ -84,7 +90,8 @@ Single self-contained **HTML** file (no server). Highlights in **v9**:
 
 **Diagram legend:**
 
-- Node shapes: Object (rectangle), Edge type (rounded), Reference (dashed purple), CDM ghost (slate).
+- Node shapes: Object (rectangle), Edge type (rounded oval on **all** levels including
+  Overview and Level 2), Reference (dashed purple), CDM ghost (slate).
 - Line styles: Direct, Edge, Reverse relations.
 
 **Diagram interactivity:**
@@ -92,11 +99,19 @@ Single self-contained **HTML** file (no server). Highlights in **v9**:
 - Pan and zoom; full-screen pop-out.
 - Click a node to open the view card.
 - **Hover** a node to see view name and description tooltip; unrelated edges dim.
+- **Find across all diagrams** (ER Diagrams tab): after diagrams render, use the search bar
+  above the level sections. Type a view name, pick a match from the dropdown, then **Go**
+  (or Enter). The matching diagram opens if needed, the node is highlighted, and the view
+  is centered in the diagram viewport.
+- **Find in this diagram**: each Level 1–5 ER diagram has its own search bar. Same workflow,
+  scoped to that diagram only.
+- **Overview** tab diagram: pan/zoom, click, and hover work as above; it does not include a
+  per-diagram find bar (use ER Diagrams find or view-card search for Overview nodes).
 
 ### Entity Hierarchy, search, theming
 
 - Collapsible CDM / IDM / domain tree with filter.
-- Live search across view cards.
+- Live search across view cards (Overview and Entity sections).
 - Dark / light mode toggle.
 
 ---
@@ -166,7 +181,7 @@ python generate_documentation_v9.py <input> [options]
 | `--cdm PATH` | CogniteCore.yaml |
 | `--idm PATH` | CogniteProcessIndustries.yaml |
 | `--ref YAML` | Reference model YAML (repeatable) |
-| `--env ENV_FILE` | CDF credentials for governed-space fetch |
+| `--env ENV_FILE` | CDF credentials: fetch CDM/IDM when `--cdm`/`--idm` omitted; governed-space refs |
 | `--version VERSION` | Toolkit template version when not in config |
 | `--config CONFIG_YAML` | Toolkit config with `variables.version` |
 | `-o / --output PATH` | Output HTML path |
@@ -202,5 +217,6 @@ html-doc-plugin/
 
 | Version | Generator | Notes |
 |---------|-----------|-------|
-| 0.2.x | v9 | L1/L3 layout, governed-space clusters, conditional L3 split, cross-space report, legend, hover tooltips, view/connection badges |
+| 0.2.1 | v9 | Global + per-diagram ER find (pan/zoom to match); edge type from `Used For: edge` containers; oval edge nodes on Overview and L2 |
+| 0.2.0 | v9 | L1/L3 layout, governed-space clusters, conditional L3 split, cross-space report, legend, hover tooltips, view/connection badges |
 | 0.1.x | v8 | Initial plugin packaging |

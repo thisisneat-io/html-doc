@@ -667,8 +667,9 @@ def parse_yaml_file(filepath):
             views[canonical_key] = view_info
 
     direct_relations = normalize_model_relations(direct_relations, views)
-    
-    return metadata, properties_by_view, views, direct_relations
+    containers_used_for = _parse_containers_section(content)
+
+    return metadata, properties_by_view, views, direct_relations, containers_used_for
 
 
 # =============================================================================
@@ -1098,7 +1099,18 @@ def parse_toolkit_dir(path, version_override=None, config_path=None):
         properties_by_view[view_key] = props
         view_info['properties'] = props
 
-    return metadata, properties_by_view, all_views, direct_relations
+    containers_used_for: dict[str, str] = {}
+    for (c_space, c_eid), c in container_data.items():
+        uf = c.get("usedFor") or c.get("used_for") or "node"
+        if isinstance(uf, str):
+            uf = uf.strip().lower()
+        else:
+            uf = "node"
+        _register_container_used_for(containers_used_for, c_eid, uf)
+        if c_space:
+            _register_container_used_for(containers_used_for, f"{c_space}:{c_eid}", uf)
+
+    return metadata, properties_by_view, all_views, direct_relations, containers_used_for
 
 
 def parse_excel_file(filepath):
@@ -1341,7 +1353,23 @@ def parse_excel_file(filepath):
                             'properties': [],
                         }
 
-    return metadata, properties_by_view, views, direct_relations
+    containers_used_for: dict[str, str] = {}
+    if 'Containers' in wb.sheetnames:
+        all_rows = list(wb['Containers'].iter_rows(values_only=True))
+        if len(all_rows) >= 2:
+            col = {
+                str(h).strip(): i
+                for i, h in enumerate(all_rows[1])
+                if h is not None
+            }
+            for row in all_rows[2:]:
+                container = _cell(row, col, 'Container')
+                if not container:
+                    continue
+                used_for = _cell(row, col, 'Used For', 'node').lower() or 'node'
+                _register_container_used_for(containers_used_for, container, used_for)
+
+    return metadata, properties_by_view, views, direct_relations, containers_used_for
 
 
 def get_inheritance_depth(view_id, all_views, cache=None):
@@ -1406,26 +1434,12 @@ def get_all_properties_for_view(view_id, properties_by_view, all_views):
     _, _bare_norm, _ = _parse_qualified_id(normalized)
     _bare_norm = _bare_norm or normalized
 
+    # Properties listed on this view in the model YAML are own properties,
+    # even when stored on a CDM container (cdf_cdm:CogniteDescribable, etc.).
+    # Inherited properties come only from the implements parent chain below.
     for prop in own_props:
-        true_source = prop.get('true_source', normalized)
-        # A property is "inherited" only when true_source is a DIFFERENT, KNOWN VIEW.
-        # Rules:
-        # 1. Same string as normalized → own (trivially).
-        # 2. true_source is a container name not in all_views → own (different naming).
-        # 3. true_source IS in all_views but its bare externalId equals the current
-        #    view's bare externalId (e.g. plain 'CogniteOperation' vs canonical
-        #    'cdf_idm:CogniteOperation') → own (same view, different namespace form).
-        # 4. true_source is a genuinely different view (e.g. 'CogniteDescribable') → inherited.
-        _, _bare_src, _ = _parse_qualified_id(true_source)
-        _bare_src = _bare_src or true_source
+        prop['inherited_from'] = None
 
-        if (true_source != normalized
-                and true_source in all_views
-                and _bare_src != _bare_norm):
-            prop['inherited_from'] = true_source
-        else:
-            prop['inherited_from'] = None
-    
     view = all_views.get(view_id) or all_views.get(normalized) or {}
     implements = view.get('implements', '')
     
@@ -1433,11 +1447,14 @@ def get_all_properties_for_view(view_id, properties_by_view, all_views):
         inherited = set(p.get('name') for p in own_props)
         
         for parent in implements.split(','):
-            parent = parent.strip().replace('cdf_cdm:', '').replace('(version=v1)', '').strip()
-            if not parent:
+            parent_raw = parent.strip()
+            if not parent_raw:
                 continue
-            
-            parent_props = get_all_properties_for_view(parent, properties_by_view, all_views)
+            parent_key = _resolve_view_key(parent_raw, all_views)
+            if not parent_key:
+                continue
+
+            parent_props = get_all_properties_for_view(parent_key, properties_by_view, all_views)
             
             for prop in parent_props:
                 if prop.get('name') not in inherited:
@@ -1479,6 +1496,80 @@ def _canonical_view_key(view_name: str) -> str:
     if ":" in view_name and "(version=" in view_name:
         return view_name
     return view_name.replace("cdf_cdm:", "").replace("(version=v1)", "").strip()
+
+
+def _normalize_container_key(container: str) -> str:
+    """Normalize a container reference for lookup in *containers_used_for*."""
+    c = (container or "").strip()
+    if not c:
+        return ""
+    c = c.replace("cdf_cdm:", "").replace("cdf_idm:", "")
+    c = re.sub(r"\(version=[^)]+\)", "", c).strip()
+    return c
+
+
+def _container_used_for_lookup(containers_used_for: dict, container_ref: str) -> str:
+    """Resolve Used For (node|edge|all) for a property's container reference."""
+    if not containers_used_for or not container_ref:
+        return ""
+    raw = container_ref.strip()
+    norm = _normalize_container_key(raw)
+    for key in (raw, norm):
+        if key and key in containers_used_for:
+            return containers_used_for[key]
+    if ":" in norm:
+        _, bare = norm.rsplit(":", 1)
+        if bare in containers_used_for:
+            return containers_used_for[bare]
+    return ""
+
+
+def _parse_containers_section(content: str) -> dict[str, str]:
+    """Parse NEAT YAML Containers section → container id → used-for (node|edge|all)."""
+    out: dict[str, str] = {}
+    match = re.search(r"\nContainers:\n(.*)\Z", content, re.DOTALL | re.IGNORECASE)
+    if not match:
+        return out
+    blocks = re.split(r"\n?- Container:", match.group(1))
+    for block in blocks:
+        if not block.strip():
+            continue
+        lines = block.strip().split("\n")
+        cname = lines[0].strip()
+        used_for = ""
+        for line in lines[1:]:
+            if line.startswith("- Container:"):
+                break
+            if ":" in line:
+                key, _, value = line.partition(":")
+                if key.strip() == "Used For":
+                    used_for = value.strip().lower()
+        if not cname:
+            continue
+        if not used_for:
+            used_for = "node"
+        norm = _normalize_container_key(cname)
+        out[norm] = used_for
+        out[cname] = used_for
+        if ":" in norm:
+            _, bare = norm.rsplit(":", 1)
+            out[bare] = used_for
+    return out
+
+
+def _register_container_used_for(target: dict, container_ref: str, used_for: str) -> None:
+    """Store *used_for* under every lookup key for *container_ref*."""
+    used_for = (used_for or "node").strip().lower()
+    raw = (container_ref or "").strip()
+    if not raw:
+        return
+    norm = _normalize_container_key(raw)
+    for key in (raw, norm):
+        if key:
+            target[key] = used_for
+    if ":" in norm:
+        _, bare = norm.rsplit(":", 1)
+        target[bare] = used_for
 
 
 def _connection_kind(connection: str) -> str | None:
@@ -1717,10 +1808,17 @@ def categorize_by_cdm_hierarchy(views, all_views):
     return categories, category_labels
 
 
-def classify_view_role(view_id, all_views, relations=None, ref_view_ids=None):
-    """Classify a view as object, edge (link type), reference, or cdm."""
+def classify_view_role(view_id, all_views, relations=None, ref_view_ids=None,
+                       containers_used_for=None):
+    """Classify a view as object, edge (link type), reference, or cdm.
+
+    Edge types are views whose own properties are stored on containers with
+    ``Used For: edge``. Relation endpoints (DOCUMENT, Tag, etc.) stay object views
+    even when they appear as the start/end of edge properties on other views.
+    """
     ref_view_ids = ref_view_ids or set()
     relations = relations or []
+    containers_used_for = containers_used_for or {}
     if view_id in ref_view_ids:
         return "reference"
     sp, bare, _ = _parse_qualified_id(view_id)
@@ -1730,27 +1828,37 @@ def classify_view_role(view_id, all_views, relations=None, ref_view_ids=None):
     ):
         return "cdm"
 
+    props = all_views.get(view_id, {}).get("properties") or []
+    own = [pr for pr in props if not pr.get("inherited_from")]
+
+    if containers_used_for and own:
+        has_edge_container = False
+        has_node_container = False
+        for pr in own:
+            cont = (pr.get("container") or "").strip()
+            if not cont:
+                continue
+            uf = _container_used_for_lookup(containers_used_for, cont)
+            if uf == "edge":
+                has_edge_container = True
+            elif uf in ("node", "all"):
+                has_node_container = True
+        if has_edge_container:
+            return "edge"
+        if has_node_container:
+            return "object"
+
+    # Fallback when container metadata is missing: only views named as edgeSource
+    # define an edge type — not views that are relation targets.
     edge_source_names = set()
     for rel in relations:
         conn = rel.get("connection") or ""
         m = re.search(r"edgeSource=([^,\)]+)", conn, re.I)
         if m:
             edge_source_names.add(m.group(1).strip())
-        if rel.get("kind") == "edge" and rel.get("target"):
-            _, t_bare, _ = _parse_qualified_id(rel["target"])
-            edge_source_names.add(t_bare or rel["target"])
-
     if bare in edge_source_names:
         return "edge"
 
-    props = all_views.get(view_id, {}).get("properties") or []
-    own = [pr for pr in props if not pr.get("inherited_from")]
-    rel_props = [pr for pr in own if _connection_kind(pr.get("connection") or "")]
-    scalar_props = [pr for pr in own if not _connection_kind(pr.get("connection") or "")]
-    if rel_props and not scalar_props:
-        kinds = {_connection_kind(pr.get("connection") or "") for pr in rel_props}
-        if kinds == {"edge"}:
-            return "edge"
     return "object"
 
 
@@ -1775,7 +1883,13 @@ class UMLDiagramGenerator:
     # Match mermaid.initialize maxTextSize in generated HTML
     MERMAID_MAX_TEXT_SIZE = 500_000
     MERMAID_SPACED_INIT = (
-        "%%{init: {'flowchart': {'nodeSpacing': 60, 'rankSpacing': 90, 'padding': 16}} }%%"
+        "%%{init: {'flowchart': {'nodeSpacing': 70, 'rankSpacing': 110, 'padding': 20}} }%%"
+    )
+    MERMAID_SPACED_INIT_LARGE = (
+        "%%{init: {'flowchart': {'nodeSpacing': 190, 'rankSpacing': 320, 'padding': 48}} }%%"
+    )
+    MERMAID_SPACED_INIT_XLARGE = (
+        "%%{init: {'flowchart': {'nodeSpacing': 240, 'rankSpacing': 440, 'padding': 56}} }%%"
     )
 
 
@@ -1790,7 +1904,7 @@ class UMLDiagramGenerator:
     _REF_CLASSDEF = 'classDef ref fill:#4c1d95,stroke:#a78bfa,stroke-width:1px,color:#ddd6fe,stroke-dasharray:4 4'
 
     def __init__(self, views, all_views, direct_relations, model_name,
-                 domain_view_ids=None, ref_view_ids=None):
+                 domain_view_ids=None, ref_view_ids=None, containers_used_for=None):
         self.views = views
         self.all_views = all_views
         self.relations = normalize_model_relations(direct_relations, all_views)
@@ -1798,6 +1912,7 @@ class UMLDiagramGenerator:
         self.children, self.parents = build_inheritance_tree(views)
         # Views belonging to governed reference spaces (distinct from CDM/IDM)
         self.ref_views = ref_view_ids or set()
+        self.containers_used_for = containers_used_for or {}
 
         self.relations_by_source = defaultdict(list)
         self.relations_by_target = defaultdict(list)
@@ -1853,7 +1968,10 @@ class UMLDiagramGenerator:
         self.edge_type_view_ids = set()
         self.view_roles = {}
         for vid in self.domain_views:
-            role = classify_view_role(vid, self.all_views, self.relations, self.ref_views)
+            role = classify_view_role(
+                vid, self.all_views, self.relations, self.ref_views,
+                containers_used_for=self.containers_used_for,
+            )
             self.view_roles[vid] = role
             if role == "edge":
                 self.edge_type_view_ids.add(vid)
@@ -1861,7 +1979,10 @@ class UMLDiagramGenerator:
     def _view_role(self, view_id):
         return self.view_roles.get(
             view_id,
-            classify_view_role(view_id, self.all_views, self.relations, self.ref_views),
+            classify_view_role(
+                view_id, self.all_views, self.relations, self.ref_views,
+                containers_used_for=self.containers_used_for,
+            ),
         )
 
     def _tooltip_label_for_view(self, view_id):
@@ -1881,12 +2002,25 @@ class UMLDiagramGenerator:
     def _mermaid_node_def(self, view_id):
         '''Mermaid node line for a view (shape differs for edge-type views).'''
         s = self._diagram_node_id(view_id)
-        node_label = self._get_label(view_id, for_diagram=True).replace('"', "'")
+        node_label = self._escape_mermaid_node_label(self._get_label(view_id, for_diagram=True))
         if view_id in getattr(self, "edge_type_view_ids", set()):
             return f'{s}(["{node_label}"]):::edgeview'
         if view_id in self.ref_views:
             return f'{s}["{node_label}"]:::ref'
         return f'{s}["{node_label}"]'
+
+    def _diagram_local_find_html(self):
+        """Per-diagram find bar (embedded in HTML so the match dropdown is always visible)."""
+        return '''
+                <div class="diagram-local-find">
+                    <input type="search" class="diagram-local-find-input" placeholder="Find view in this diagram…" autocomplete="off">
+                    <select class="diagram-local-find-select" title="Matching views" disabled>
+                        <option value="">— matches —</option>
+                    </select>
+                    <button type="button" class="diagram-local-find-go">Go</button>
+                    <button type="button" class="diagram-local-find-clear">Clear</button>
+                    <span class="diagram-local-find-msg" aria-live="polite"></span>
+                </div>'''
 
     def _er_diagram_legend_html(self):
         '''Legend for relation arrows and view-type node shapes.'''
@@ -1907,7 +2041,7 @@ class UMLDiagramGenerator:
             "<li>Gray dashed — CDM type</li>"
             "</ul></div>"
             "<p style=\"margin:0.5rem 0 0 0;font-size:0.85rem;\">"
-            "Hover a box to read the full <code>space:View</code> id. "
+            "Hover a box to read the full <code>space.View</code> id. "
             "In property tables, <span class=\"conn-badge conn-direct\">Direct</span> "
             "<span class=\"conn-badge conn-edge\">Edge</span> "
             "<span class=\"conn-badge conn-reverse\">Reverse</span> mark connection kinds."
@@ -1958,7 +2092,8 @@ class UMLDiagramGenerator:
         name = display or bare or _clean(view_id)
 
         if for_diagram and sp:
-            return f'{sp}:{name}'
+            # Use '.' (not ':') — Mermaid 11 breaks on colons inside ["..."] node labels.
+            return f'{sp}.{name}'
         return name if name else view_id
 
     def _diagram_node_id(self, view_id):
@@ -1974,8 +2109,16 @@ class UMLDiagramGenerator:
         s = (label or '').replace('"', "'").replace('|', '/').replace('\n', ' ')
         # Square brackets inside |"..."| labels break Mermaid 11 parsers (conflict with node syntax).
         s = s.replace('[', '(').replace(']', ')')
+        s = s.replace(':', '·')
+        # Parentheses in |"label (0..1)"| break Mermaid 11 flowchart parsing in the browser.
+        s = s.replace('(', ' ').replace(')', ' ')
+        s = re.sub(r'\s+', ' ', s).strip()
         s = re.sub(r'[^\x20-\x7e]', '', s)
         return s
+
+    def _escape_mermaid_node_label(self, label):
+        """Safe text inside flowchart node brackets (node shapes, subgraph titles)."""
+        return self._escape_mermaid_label(label)
     
     def _sanitize(self, s, record=True):
         """Make string safe for Mermaid IDs and record mapping.
@@ -2001,6 +2144,14 @@ class UMLDiagramGenerator:
             label = self._get_label(view_id)
             if label and label != view_id:
                 self.node_mapping[label] = view_id
+            diagram_label = self._get_label(view_id, for_diagram=True)
+            if diagram_label and diagram_label != view_id:
+                self.node_mapping[diagram_label] = view_id
+            sp, bare, _ver = _parse_qualified_id(view_id)
+            if bare:
+                self.node_mapping[bare] = view_id
+            if sp and bare:
+                self.node_mapping[f'{sp}.{bare}'] = view_id
             self.node_tooltip_labels[sanitized] = self._tooltip_label_for_view(view_id)
     
     def _get_multiplicity(self, rel):
@@ -2038,6 +2189,7 @@ class UMLDiagramGenerator:
             <div class="er-diagram-box">
                 <h3>{title}</h3>
                 <p class="diagram-desc">{description}</p>
+                {self._diagram_local_find_html()}
                 <pre class="mermaid-source">
 classDiagram
     {nodes_str}
@@ -2057,7 +2209,7 @@ classDiagram
         groups = {}
         for rel in rels:
             src, tgt = rel["source"], rel["target"]
-            if src in added and tgt in added:
+            if src in added and tgt in added and src != tgt:
                 groups.setdefault((src, tgt), []).append(rel)
         result = []
         for (src, tgt), group_rels in groups.items():
@@ -2093,7 +2245,7 @@ classDiagram
         s, t = self._diagram_node_id(src), self._diagram_node_id(tgt)
         label = self._escape_mermaid_label(label)
         if mult is not None:
-            label = f'{label} ({mult})'
+            label = self._escape_mermaid_label(f'{label} {mult}')
         if kind == 'edge':
             return f'    {s} ==>|"{label}"| {t}'
         if kind == 'reverse':
@@ -2105,7 +2257,7 @@ classDiagram
         groups = {}
         for rel in rels:
             src, tgt = rel['source'], rel['target']
-            if src in added and tgt in added:
+            if src in added and tgt in added and src != tgt:
                 kind = rel.get('kind', 'direct')
                 groups.setdefault((src, tgt, kind), []).append(rel)
         for (src, tgt, kind), group_rels in groups.items():
@@ -2119,7 +2271,11 @@ classDiagram
                 lines.append(self._relation_arrow(src, tgt, label, kind=kind))
 
 
-    def _mermaid_spaced_init_line(self):
+    def _mermaid_spaced_init_line(self, large=False, xlarge=False):
+        if xlarge:
+            return self.MERMAID_SPACED_INIT_XLARGE
+        if large:
+            return self.MERMAID_SPACED_INIT_LARGE
         return self.MERMAID_SPACED_INIT
 
     def _estimate_mermaid_text_size(self, lines):
@@ -2128,7 +2284,21 @@ classDiagram
     def _mermaid_exceeds_text_limit(self, lines):
         return self._estimate_mermaid_text_size(lines) > self.MERMAID_MAX_TEXT_SIZE
 
-    def _build_space_cluster_sections(self, view_ids, cdm_ghost_nodes=None):
+    def _indent_flowchart_lines(self, lines, extra=4):
+        pad = ' ' * extra
+        return [f'{pad}{ln}' if ln.strip() else ln for ln in lines]
+
+    def _vertical_subgraph_wrapper(self, inner_lines, wrap_id, wrap_label):
+        """Wrap peer subgraphs in a parent with direction TB so Dagre stacks them vertically."""
+        out = [
+            f'    subgraph {wrap_id}["{self._escape_mermaid_node_label(wrap_label)}"]',
+            '        direction TB',
+        ]
+        out.extend(self._indent_flowchart_lines(inner_lines, 4))
+        out.append('    end')
+        return out
+
+    def _build_space_cluster_sections(self, view_ids, cdm_ghost_nodes=None, max_per_group=8):
         """Build Mermaid subgraphs by governed space with vertical sub-clusters (L1/L3 layout)."""
         subgraph_lines = []
         invisible_lines = []
@@ -2141,14 +2311,17 @@ classDiagram
             by_space[sp].append(v)
 
         for idx, (sp, members) in enumerate(sorted(by_space.items())):
-            label = self._space_label(sp).replace('"', "'")
+            label = self._escape_mermaid_node_label(self._space_label(sp))
             sg_id = f'SP{idx}'
             subgraph_lines.append(f'    subgraph {sg_id}["{label}"]')
+            subgraph_lines.append('        direction TB')
             group_tips = []
-            for g_idx, (group_label, group_members) in enumerate(self._layout_member_groups(members)):
+            for g_idx, (group_label, group_members) in enumerate(
+                    self._layout_member_groups(members, max_per_group=max_per_group)):
                 g_id = f'{sg_id}G{g_idx}'
-                gl = group_label.replace('"', "'")
+                gl = self._escape_mermaid_node_label(group_label)
                 subgraph_lines.append(f'        subgraph {g_id}["{gl}"]')
+                subgraph_lines.append('            direction TB')
                 row_ids = []
                 for v in group_members:
                     s = self._diagram_node_id(v)
@@ -2158,23 +2331,11 @@ classDiagram
                     added.add(v)
                     row_ids.append(s)
                 subgraph_lines.append('        end')
-                self._append_vertical_spine(invisible_lines, row_ids)
-                if row_ids:
-                    group_tips.append(row_ids[0])
-            for i in range(len(group_tips) - 1):
-                invisible_lines.append(f'    {group_tips[i]} ~~~ {group_tips[i + 1]}')
             subgraph_lines.append('    end')
-            if group_tips:
-                space_spine_tips.append(group_tips[0])
-
-        for i in range(len(space_spine_tips) - 1):
-            invisible_lines.append(f'    {space_spine_tips[i]} ~~~ {space_spine_tips[i + 1]}')
 
         if cdm_ghost_nodes:
             ghost_list = sorted(cdm_ghost_nodes - added)
             if ghost_list:
-                if space_spine_tips:
-                    invisible_lines.append(f'    {space_spine_tips[-1]} ~~~ CDM_SPACER')
                 subgraph_lines.append('    CDM_SPACER[" "]')
                 subgraph_lines.append('    subgraph CDMREF["CDM References"]')
                 cdm_row_ids = []
@@ -2182,12 +2343,11 @@ classDiagram
                     cp_key = _resolve_view_key(cp, self.all_views)
                     s = self._diagram_node_id(cp_key)
                     self._register_node(cp_key)
-                    lbl = self._get_label(cp_key, for_diagram=True).replace('"', "'")
-                    subgraph_lines.append(f'        {s}(["{lbl}"]):::cdm')
+                    lbl = self._escape_mermaid_node_label(self._get_label(cp_key, for_diagram=True))
+                    subgraph_lines.append(f'        {s}["{lbl}"]:::cdm')
                     added.add(cp_key)
                     cdm_row_ids.append(s)
                 subgraph_lines.append('    end')
-                self._append_vertical_spine(invisible_lines, cdm_row_ids)
                 subgraph_lines.append(
                     '    style CDM_SPACER fill:none,stroke:none,color:transparent'
                 )
@@ -2238,15 +2398,19 @@ classDiagram
         ext_n = len(summary["to_external"])
 
         lines = [
-            '<div class="cross-space-report" style="margin:1rem 0 1.5rem 0;padding:1rem;'
-            'background:var(--bg-card);border:1px solid var(--border-color);border-radius:8px;">',
+            '<div class="cross-space-report">',
             "<h4>Cross-space relations</h4>",
             "<p>Domain views in different <strong>governed spaces</strong> can reference each other "
             "via direct properties (REFCL in source data). Links to CDM types "
             "(CogniteAsset, CogniteEquipment, …) are <em>not</em> cross-space—they are shared infrastructure.</p>",
-            f"<ul><li><strong>{within_n}</strong> relation(s) between views in the <em>same</em> governed space</li>"
-            f"<li><strong>{cross_n}</strong> direct relation(s) from one governed space to another</li>"
-            f"<li><strong>{ext_n}</strong> relation(s) from a domain view to CDM / external types</li></ul>",
+            '<ul class="cross-space-stats">',
+            f'<li><span class="stat-value">{within_n}</span>'
+            f'<span class="stat-label">relation(s) between views in the <em>same</em> governed space</span></li>',
+            f'<li><span class="stat-value">{cross_n}</span>'
+            f'<span class="stat-label">direct relation(s) from one governed space to another</span></li>',
+            f'<li><span class="stat-value">{ext_n}</span>'
+            f'<span class="stat-label">relation(s) from a domain view to CDM / external types</span></li>',
+            "</ul>",
         ]
         if cross_n == 0:
             lines.append(
@@ -2273,7 +2437,7 @@ classDiagram
         return "\n".join(lines)
 
 
-    def _layout_member_groups(self, members, max_per_group=12):
+    def _layout_member_groups(self, members, max_per_group=8):
         """Split a space's views into vertical sub-clusters (reduces node overlap)."""
         from collections import defaultdict
 
@@ -2287,57 +2451,49 @@ classDiagram
             for i in range(0, len(ordered), max_per_group):
                 chunk = ordered[i : i + max_per_group]
                 if chunk:
-                    title = parent if len(ordered) <= max_per_group else f"{parent} ({i // max_per_group + 1})"
-                    groups.append((title.replace('"', "'"), chunk))
+                    title = (
+                        parent
+                        if len(ordered) <= max_per_group
+                        else f"{parent} — {i // max_per_group + 1}"
+                    )
+                    groups.append((self._escape_mermaid_node_label(title), chunk))
         return groups if groups else [("Views", list(members))]
 
     def _append_vertical_spine(self, lines, node_ids):
-        """Invisible edges to force a vertical node stack (more separation)."""
-        for i in range(len(node_ids) - 1):
-            lines.append(f"    {node_ids[i]} ~~~ {node_ids[i + 1]}")
+        """No-op: Mermaid 11 dagre raises 'order' errors on ~~~ links inside nested subgraphs."""
+        return
 
-    def _build_level3_flowchart(self, space_items, domain_rels, cluster_colors, max_edges=120):
+    def _build_level3_flowchart(self, space_items, domain_rels, cluster_colors, max_edges=120,
+                                 max_per_group=5):
         """Mermaid flowchart for one or more governed spaces (vertical sub-clusters)."""
-        lines = [self._mermaid_spaced_init_line(), "flowchart TB"]
+        lines = [self._mermaid_spaced_init_line(large=True), "flowchart TB"]
         all_members = set()
         for _, members in space_items:
             all_members.update(members)
         added = set()
-        space_spine_tips = []
 
         for sp_idx, (sp, members) in enumerate(space_items):
             color = cluster_colors[sp_idx % len(cluster_colors)]
-            members_set = set(members)
             outer_id = f"L3SP{sp_idx}"
-            sp_title = self._space_label(sp).replace('"', "'")
+            sp_title = self._escape_mermaid_node_label(self._space_label(sp))
             lines.append(f'    subgraph {outer_id}["{sp_title}"]')
-            group_tips = []
-            for g_idx, (group_label, group_members) in enumerate(self._layout_member_groups(members)):
+            lines.append('        direction TB')
+            for g_idx, (group_label, group_members) in enumerate(
+                    self._layout_member_groups(members, max_per_group=max_per_group)):
                 g_id = f"{outer_id}G{g_idx}"
-                gl = group_label.replace('"', "'")
+                gl = self._escape_mermaid_node_label(group_label)
                 lines.append(f'        subgraph {g_id}["{gl}"]')
-                row_ids = []
+                lines.append('            direction TB')
                 for v in group_members:
                     self._register_node(v)
                     lines.append(f'            {self._mermaid_node_def(v)}')
                     added.add(v)
-                    row_ids.append(self._diagram_node_id(v))
                 lines.append("        end")
-                self._append_vertical_spine(lines, row_ids)
-                if row_ids:
-                    group_tips.append(row_ids[0])
-            for i in range(len(group_tips) - 1):
-                lines.append(f"        {group_tips[i]} ~~~ {group_tips[i + 1]}")
             lines.append("    end")
-            if group_tips:
-                space_spine_tips.append(group_tips[0])
             for v in members:
                 lines.append(
                     f'    style {self._diagram_node_id(v)} fill:{color},color:#fff,stroke:#fff,stroke-width:2px'
                 )
-
-        for i in range(len(space_spine_tips) - 1):
-            lines.append(f"    {space_spine_tips[i]} ~~~ {space_spine_tips[i + 1]}")
 
         cdm_targets = {
             r['target'] for r in domain_rels
@@ -2345,22 +2501,16 @@ classDiagram
             and r['target'] not in all_members
             and r['target'] in self.all_views
         }
-        cdm_row_ids = []
         if cdm_targets:
-            if space_spine_tips:
-                lines.append(f"    {space_spine_tips[-1]} ~~~ CDM_SPACER")
-            lines.append('    CDM_SPACER[" "]')
             lines.append('    subgraph CDMREF["CDM References"]')
             for cp in sorted(cdm_targets, key=lambda x: self._get_label(x, for_diagram=True)):
                 cp_key = _resolve_view_key(cp, self.all_views)
                 s = self._diagram_node_id(cp_key)
                 self._register_node(cp_key)
-                lbl = self._get_label(cp_key, for_diagram=True).replace('"', "'")
-                lines.append(f'        {s}(["{lbl}"]):::cdm')
+                lbl = self._escape_mermaid_node_label(self._get_label(cp_key, for_diagram=True))
+                lines.append(f'        {s}["{lbl}"]:::cdm')
                 added.add(cp_key)
-                cdm_row_ids.append(s)
             lines.append("    end")
-            self._append_vertical_spine(lines, cdm_row_ids)
 
         space_rels = [r for r in domain_rels if r['source'] in all_members]
         domain_internal = [r for r in space_rels if r['target'] in all_members]
@@ -2443,14 +2593,8 @@ classDiagram
             lines.append(f'    class {",".join(ref_in_diagram)} ref')
 
     def _click_lines(self, added_views):
-        """Generate Mermaid click directives for all added views that have detail cards."""
-        lines = []
-        for v in sorted(added_views):
-            sanitized = self._diagram_node_id(v)
-            if v in self.views:
-                # Use sanitized node-id as callback arg — colons in view IDs break Mermaid 11
-                lines.append(f'    click {sanitized} call openModalFromDiagram("{sanitized}")')
-        return lines
+        """Clicks are wired in JS (makeNodesClickable); Mermaid click/call breaks L3 in v11."""
+        return []
     
     # =========================================================================
     # LEVEL 1: DOMAIN MODEL OVERVIEW
@@ -2461,7 +2605,7 @@ classDiagram
         if len(self.domain_views) < 2:
             return ""
 
-        lines = [self._mermaid_spaced_init_line(), 'flowchart TB']
+        lines = [self._mermaid_spaced_init_line(large=True), 'flowchart TB']
         cluster_colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4']
 
         cdm_parents = set()
@@ -2522,6 +2666,7 @@ classDiagram
             <div class="er-diagram-box">
                 <h3>Level 1: {self.model_name} - Domain Overview</h3>
                 <p class="diagram-desc">Domain views grouped by governed space with vertical sub-clusters (by CDM anchor). Solid = direct, thick = edge, dashed = reverse. CDM types shown as ghost context.{ref_legend}</p>
+                {self._diagram_local_find_html()}
                 <pre class="mermaid-source">
 {chr(10).join(lines)}
                 </pre>
@@ -2558,12 +2703,12 @@ classDiagram
         if not neighbours and not cdm_parent and not ref_out and not ref_in:
             return ""
 
-        lines = ['flowchart LR']
+        lines = [self._mermaid_spaced_init_line(), 'flowchart LR']
         added = set()
 
         # ── Focus entity ──────────────────────────────────────────────────────
         self._register_node(view_id)
-        lines.append(f'    {focus_s}["{focus_label}"]')
+        lines.append(f'    {self._mermaid_node_def(view_id)}')
         added.add(view_id)
 
         # ── Outgoing targets (domain views, incl. ref views) ──────────────────
@@ -2571,10 +2716,8 @@ classDiagram
         if out_nodes:
             lines.append('    subgraph OUT["Outgoing relations"]')
             for t in out_nodes:
-                s = self._diagram_node_id(t)
                 self._register_node(t)
-                cls = ':::ref' if t in self.ref_views else ''
-                lines.append(f'        {s}["{self._get_label(t, for_diagram=True)}"]{cls}')
+                lines.append('        ' + self._mermaid_node_def(t))
                 added.add(t)
             lines.append('    end')
 
@@ -2584,16 +2727,15 @@ classDiagram
         if in_nodes:
             lines.append('    subgraph IN["Incoming relations"]')
             for s_id in in_nodes:
-                s = self._diagram_node_id(s_id)
                 self._register_node(s_id)
-                cls = ':::ref' if s_id in self.ref_views else ''
-                lines.append(f'        {s}["{self._get_label(s_id, for_diagram=True)}"]{cls}')
+                lines.append('        ' + self._mermaid_node_def(s_id))
                 added.add(s_id)
             lines.append('    end')
 
         # ── CDM parent ghost ──────────────────────────────────────────────────
         if cdm_parent and cdm_parent not in added:
-            lines.append(f'    {self._diagram_node_id(cdm_parent)}(["{self._get_label(cdm_parent, for_diagram=True)}"]):::cdm')
+            cdm_lbl = self._escape_mermaid_node_label(self._get_label(cdm_parent, for_diagram=True))
+            lines.append(f'    {self._diagram_node_id(cdm_parent)}["{cdm_lbl}"]:::cdm')
             self._register_node(cdm_parent)
             added.add(cdm_parent)
 
@@ -2629,21 +2771,30 @@ classDiagram
 
         # ── Styles ────────────────────────────────────────────────────────────
         lines.append('    classDef cdm fill:#1e3a5f,stroke:#3b82f6,stroke-width:1px,color:#93c5fd,stroke-dasharray:5 5')
+        lines.append('    classDef edgeview fill:#431407,stroke:#fb923c,stroke-width:2px,color:#ffedd5')
         lines.append(f'    {self._REF_CLASSDEF}')
-        lines.append(f'    style {focus_s} fill:#3b82f6,color:#fff,stroke:#fff,stroke-width:3px')
+        if view_id in self.edge_type_view_ids:
+            lines.append(
+                f'    style {focus_s} fill:#431407,color:#ffedd5,'
+                f'stroke:#fb923c,stroke-width:3px'
+            )
+        else:
+            lines.append(f'    style {focus_s} fill:#3b82f6,color:#fff,stroke:#fff,stroke-width:3px')
         for t in out_nodes:
-            if t in self.ref_views:
-                continue  # styled by classDef ref
+            if t in self.ref_views or t in self.edge_type_view_ids:
+                continue
             lines.append(f'    style {self._diagram_node_id(t)} fill:#10b981,color:#fff,stroke:#fff,stroke-width:2px')
         for s_id in in_nodes:
-            if s_id in self.ref_views:
-                continue  # styled by classDef ref
+            if s_id in self.ref_views or s_id in self.edge_type_view_ids:
+                continue
             lines.append(f'    style {self._diagram_node_id(s_id)} fill:#f59e0b,color:#fff,stroke:#fff,stroke-width:2px')
         # views that appear in both OUT and IN (non-ref domain): blended purple
         for v in (out_targets & in_sources & domain_ids):
-            if v in self.ref_views:
-                continue  # styled by classDef ref
-            lines.append(f'    style {self._sanitize(v)} fill:#8b5cf6,color:#fff,stroke:#fff,stroke-width:2px')
+            if v in self.ref_views or v in self.edge_type_view_ids:
+                continue
+            lines.append(
+                f'    style {self._diagram_node_id(v)} fill:#8b5cf6,color:#fff,stroke:#fff,stroke-width:2px'
+            )
 
         lines.extend(self._click_lines(added))
 
@@ -2653,7 +2804,7 @@ classDiagram
         _sp, _bare, _ver = _parse_qualified_id(view_id)
         _qual = f'{_sp}:{_bare}(version={_ver})' if _sp and _ver else (f'{_sp}:{_bare}' if _sp else view_id)
         return f'''
-            <div class="er-diagram-box">
+            <div class="er-diagram-box diagram-compact">
                 <h3>Level 2: {focus_label}</h3>
                 <p class="diagram-desc"><code>{_qual}</code><br/>
                     Relations for <strong>{focus_label}</strong>.
@@ -2662,6 +2813,7 @@ classDiagram
                     <span style="color:#f59e0b">■</span> incoming sources &nbsp;
                     <span style="color:#8b5cf6">■</span> both directions{ref_leg}
                 </p>
+                {self._diagram_local_find_html()}
                 <pre class="mermaid-source">
 {chr(10).join(lines)}
                 </pre>
@@ -2698,17 +2850,18 @@ classDiagram
                 self._register_node(v)
                 label = self._get_label(v)
                 node_indent = (indent + '    ') if use_wrapper else indent
+                safe_label = self._escape_mermaid_node_label(
+                    self._get_label(v, for_diagram=True) if ghost else label
+                )
                 if ghost:
-                    subgraph_lines.append(f'{node_indent}{s}(["{label}"]):::cdm')
+                    subgraph_lines.append(f'{node_indent}{s}["{safe_label}"]:::cdm')
                 else:
-                    subgraph_lines.append(f'{node_indent}{s}["{label}"]')
+                    subgraph_lines.append(f'{node_indent}{s}["{safe_label}"]')
                 added.add(v)
                 sanitized_ids.append(s)
             if use_wrapper:
                 subgraph_lines.append(f'{indent}end')
-            for i in range(len(sanitized_ids) - 1):
-                invisible_lines.append(f'    {sanitized_ids[i]} ~~~ {sanitized_ids[i + 1]}')
-            return sanitized_ids[0]
+            return sanitized_ids[0] if sanitized_ids else None
 
         # Fringe leaf block
         fringe_list = sorted(describable_fringe)
@@ -2731,10 +2884,6 @@ classDiagram
             anchor = _add_section('CDMREF', 'CDM References', ghost_list, ghost=True)
             if anchor:
                 spine_anchors.append(anchor)
-
-        # Cross-section spine
-        for i in range(len(spine_anchors) - 1):
-            invisible_lines.append(f'    {spine_anchors[i]} ~~~ {spine_anchors[i + 1]}')
 
         return subgraph_lines, invisible_lines, spine_anchors, added
 
@@ -2762,7 +2911,6 @@ classDiagram
         combined_lines, _ = self._build_level3_flowchart(
             space_items, domain_rels, cluster_colors, max_edges=combined_max_edges
         )
-        combined_ok = not self._mermaid_exceeds_text_limit(combined_lines)
         multi_space = n_spaces > 1
 
         blocks = [
@@ -2771,30 +2919,14 @@ classDiagram
         if multi_space:
             blocks.insert(
                 0,
-                '<p class="level-desc">Level 3 provides a <strong>combined overview</strong> (when it fits '
-                f"Mermaid's {self.MERMAID_MAX_TEXT_SIZE:,}-character limit) and <strong>per governed space</strong> "
-                "diagrams for detail. Sub-clusters group views by CDM anchor with vertical spacing.</p>",
+                '<p class="level-desc">Level 3 shows <strong>one diagram per governed space</strong> '
+                "(nested subgraphs by CDM anchor). A single combined map is omitted because Mermaid's "
+                "layout engine cannot reliably render all spaces together.</p>",
             )
         else:
             blocks.insert(
                 0,
-                '<p class="level-desc">Relationship map with vertical sub-clusters by CDM anchor.</p>',
-            )
-
-        if multi_space and combined_ok:
-            blocks.append(f'''
-            <div class="er-diagram-box">
-                <h3>Level 3: {self.model_name} - Complete Relationship Map</h3>
-                <p class="diagram-desc">All {len(self.domain_views)} domain views across {n_spaces} governed spaces (overview)</p>
-                <pre class="mermaid-source">
-{chr(10).join(combined_lines)}
-                </pre>
-            </div>''')
-        elif multi_space and not combined_ok:
-            blocks.append(
-                '<p class="level-desc" style="font-style:italic;">Combined overview omitted '
-                f"(diagram source exceeds {self.MERMAID_MAX_TEXT_SIZE:,} characters). "
-                "Use the per-space diagrams below.</p>"
+                '<p class="level-desc">Relationship map with sub-clusters by CDM anchor.</p>',
             )
 
         if multi_space:
@@ -2804,9 +2936,10 @@ classDiagram
                 lines, _ = self._build_single_space_diagram(sp, members, domain_rels, color)
                 sp_title = self._space_label(sp)
                 blocks.append(f'''
-            <div class="er-diagram-box">
+            <div class="er-diagram-box diagram-xlarge">
                 <h3>Level 3: {sp_title}</h3>
                 <p class="diagram-desc">{len(members)} views in <code>{sp_title}</code></p>
+                {self._diagram_local_find_html()}
                 <pre class="mermaid-source">
 {chr(10).join(lines)}
                 </pre>
@@ -2815,9 +2948,10 @@ classDiagram
             lines = combined_lines
             sp_title = self._space_label(space_items[0][0])
             blocks.append(f'''
-            <div class="er-diagram-box">
+            <div class="er-diagram-box diagram-xlarge">
                 <h3>Level 3: {sp_title}</h3>
                 <p class="diagram-desc">{len(self.domain_views)} views in <code>{sp_title}</code></p>
+                {self._diagram_local_find_html()}
                 <pre class="mermaid-source">
 {chr(10).join(lines)}
                 </pre>
@@ -2835,17 +2969,29 @@ classDiagram
         if len(self.domain_views) > 150:
             return ('<p style="color:#94a3b8;font-style:italic;padding:1rem;">Level 4 omitted: ' + str(len(self.domain_views)) + ' views exceeds 150-view threshold. Per-category ER diagrams show detail.</p>')
 
-        lines = ['flowchart TB']
+        lines = [self._mermaid_spaced_init_line(xlarge=True), 'flowchart TB']
         cluster_colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4']
         domain_rels_only = self._get_domain_relations(include_cdm_targets=False)
         all_rels = self._get_domain_relations(include_cdm_targets=True)
         describable_fringe = set(self._get_describable_fringe(domain_rels_only))
 
-        # Domain sections
-        sg_lines, inv_lines, spine_anchors, added = self._build_vertical_sections(
-            describable_fringe, domain_rels_only)
-        lines.extend(sg_lines)
-        lines.extend(inv_lines)
+        # Domain sections — by governed space (vertical stack), not flat cluster row
+        added = set()
+        if describable_fringe:
+            lines.append('    subgraph DS["Describable Leaf Types"]')
+            lines.append('        direction TB')
+            for v in sorted(describable_fringe):
+                s = self._diagram_node_id(v)
+                self._register_node(v)
+                lbl = self._escape_mermaid_node_label(self._get_label(v, for_diagram=True))
+                lines.append(f'        {s}["{lbl}"]')
+                added.add(v)
+            lines.append('    end')
+        domain_main = {v for v in self.domain_views if v not in describable_fringe}
+        space_sg, _, added_space = self._build_space_cluster_sections(
+            domain_main, max_per_group=5)
+        added.update(added_space)
+        lines.extend(self._vertical_subgraph_wrapper(space_sg, 'DOMAIN', 'Domain views'))
 
         # Build CDM node set: implements-parents + direct-relation CDM targets (exclude domain+ref)
         cdm_parents = set()
@@ -2865,20 +3011,18 @@ classDiagram
 
         if cdm_all:
             lines.append('    subgraph CDM["CDM Foundation"]')
+            lines.append('        direction TB')
             for cp in cdm_all:
                 sid = self._sanitize(cp)
-                lines.append(f'        {sid}(["{cp}"]):::cdm')
+                cp_lbl = self._escape_mermaid_node_label(cp)
+                lines.append(f'        {sid}["{cp_lbl}"]:::cdm')
                 self._register_node(cp)
                 added.add(cp)
             lines.append('    end')
-            if spine_anchors:
-                lines.append(f'    {spine_anchors[-1]} ~~~ {self._sanitize(cdm_all[0], record=False)}')
-            for i in range(len(cdm_all) - 1):
-                lines.append(f'    {self._sanitize(cdm_all[i], record=False)} ~~~ {self._sanitize(cdm_all[i + 1], record=False)}')
 
         # All data relation edges (domain→domain + domain→CDM + domain→ref)
         for src, tgt, prop in self._collect_merged_edges(all_rels, added, max_label=15):
-            lines.append(f'    {self._sanitize(src)} -->|"{prop}"| {self._sanitize(tgt)}')
+            lines.append(self._relation_arrow(src, tgt, prop))
 
         # CDM implements edges (dashed)
         for v in self.domain_views:
@@ -2916,9 +3060,10 @@ classDiagram
         ref_legend = (' &nbsp;<span style="color:#a78bfa">&#9632;</span> governed-space reference'
                       if ref_in_diagram else '')
         return f'''
-            <div class="er-diagram-box">
+            <div class="er-diagram-box diagram-xlarge">
                 <h3>Level 4: {self.model_name} - Full Architecture</h3>
                 <p class="diagram-desc">Complete domain model with CDM foundation. Solid edges = data relations, dashed = implements.{ref_legend}</p>
+                {self._diagram_local_find_html()}
                 <pre class="mermaid-source">
 {chr(10).join(lines)}
                 </pre>
@@ -2936,7 +3081,7 @@ classDiagram
         if len(self.domain_views) > 150:
             return ('<p style="color:#94a3b8;font-style:italic;padding:1rem;">Level 5 omitted: ' + str(len(self.domain_views)) + ' views exceeds 150-view threshold. Per-category ER diagrams show detail.</p>')
 
-        lines = ["flowchart TB"]
+        lines = [self._mermaid_spaced_init_line(xlarge=True), "flowchart TB"]
         cluster_colors = ["#3b82f6","#10b981","#f59e0b","#ef4444","#8b5cf6","#ec4899","#06b6d4"]
         domain_rels_only = self._get_domain_relations(include_cdm_targets=False)
         all_rels = self._get_domain_relations(include_cdm_targets=True)
@@ -2962,11 +3107,23 @@ classDiagram
                     cdm_all_set.add(impl)
         cdm_all = sorted(cdm_all_set)
 
-        # Domain sections (vertical-spine layout)
-        sg_lines, inv_lines, spine_anchors, added = self._build_vertical_sections(
-            describable_fringe, domain_rels_only)
-        lines.extend(sg_lines)
-        lines.extend(inv_lines)
+        # Domain sections — by governed space (vertical stack)
+        added = set()
+        if describable_fringe:
+            lines.append('    subgraph DS["Describable Leaf Types"]')
+            lines.append('        direction TB')
+            for v in sorted(describable_fringe):
+                s = self._diagram_node_id(v)
+                self._register_node(v)
+                lbl = self._escape_mermaid_node_label(self._get_label(v, for_diagram=True))
+                lines.append(f'        {s}["{lbl}"]')
+                added.add(v)
+            lines.append('    end')
+        domain_main = {v for v in self.domain_views if v not in describable_fringe}
+        space_sg, _, added_space = self._build_space_cluster_sections(
+            domain_main, max_per_group=5)
+        added.update(added_space)
+        lines.extend(self._vertical_subgraph_wrapper(space_sg, 'DOMAIN', 'Domain views'))
 
         # Catch-all: emit any domain view not yet in 'added'
         unclustered = [v for v in sorted(self.domain_views.keys()) if v not in added]
@@ -2974,20 +3131,22 @@ classDiagram
             for v in unclustered:
                 s = self._diagram_node_id(v)
                 self._register_node(v)
-                lines.append(f'    {s}["{self._get_label(v)}"]')
+                lines.append(
+                    f'    {s}["{self._escape_mermaid_node_label(self._get_label(v, for_diagram=True))}"]'
+                )
                 added.add(v)
 
         # CDM Foundation subgraph
         if cdm_all:
             lines.append('    subgraph CDM["CDM Foundation"]')
+            lines.append('        direction TB')
             for cp in cdm_all:
                 sid = self._sanitize(cp)
-                lines.append(f'        {sid}(["{cp}"]):::cdm')
+                cp_lbl = self._escape_mermaid_node_label(cp)
+                lines.append(f'        {sid}["{cp_lbl}"]:::cdm')
                 self._register_node(cp)
                 added.add(cp)
             lines.append("    end")
-            if spine_anchors:
-                lines.append(f'    {spine_anchors[-1]} ~~~ {self._sanitize(cdm_all[0], record=False)}')
 
         # Data relation edges (domain→domain + domain→CDM + domain→ref)
         for src, tgt, prop, mult in self._collect_merged_edges(
@@ -3030,9 +3189,10 @@ classDiagram
         ref_legend = (' &nbsp;<span style="color:#a78bfa">&#9632;</span> governed-space reference'
                       if ref_in_diagram else '')
         return f"""
-            <div class="er-diagram-box">
+            <div class="er-diagram-box diagram-xlarge">
                 <h3>Level 5: {self.model_name} - All Relations incl. CDM Implements</h3>
                 <p class="diagram-desc">Every domain view, every data relation, and every CDM implementation chain. Solid arrows = data relations, dashed = implements hierarchy.{ref_legend}</p>
+                {self._diagram_local_find_html()}
                 <pre class="mermaid-source">
 {chr(10).join(lines)}
                 </pre>
@@ -3097,11 +3257,25 @@ classDiagram
         return '\n'.join(diagrams), self.node_mapping, self.node_tooltip_labels
 
 
+def _escape_mermaid_node_text(label):
+    """Safe text inside Mermaid 11 flowchart node / subgraph labels."""
+    s = (label or '').replace('"', "'").replace('|', '/').replace('\n', ' ')
+    s = s.replace('[', '(').replace(']', ')').replace(':', '·')
+    return re.sub(r'[^\x20-\x7e]', '', s)
+
+
+# Overview nodes sit inside a space subgraph — use view name only; allow longer labels than ER caps.
+OVERVIEW_NODE_LABEL_MAX = 48
+OVERVIEW_EDGE_LABEL_MAX = 28
+
+
 def generate_overview_diagram(views, all_views, direct_relations, model_name,
-                              domain_view_ids=None, ref_view_ids=None):
+                              domain_view_ids=None, ref_view_ids=None,
+                              edge_type_view_ids=None):
     """Generate a domain-centric overview diagram for the front page."""
     domain_ids = domain_view_ids or set()
     ref_ids = ref_view_ids or set()
+    edge_ids = edge_type_view_ids or set()
 
     domain_views = {}
     for vid, vinfo in views.items():
@@ -3168,22 +3342,28 @@ def generate_overview_diagram(views, all_views, direct_relations, model_name,
     color_idx = 0
     for idx, (sp, child_views) in enumerate(sorted(by_space.items())):
         sg_id = f'sg_{idx}'
-        sg_label = _ov_space_label(sp)
+        sg_label = _escape_mermaid_node_text(_ov_space_label(sp))
         content_lines.append(f'    subgraph {sg_id} ["{sg_label}"]')
         for vid in sorted(child_views, key=lambda v: get_label(v)):
-            label = get_label(vid, for_diagram=True)[:28]
+            label = _escape_mermaid_node_text(get_label(vid, for_diagram=False))
+            if len(label) > OVERVIEW_NODE_LABEL_MAX:
+                label = label[: OVERVIEW_NODE_LABEL_MAX - 1] + '…'
             sid = sanitize(vid)
-            cls = ':::ref' if vid in ref_ids else ''
-            content_lines.append(f'        {sid}["{label}"]{cls}')
+            if vid in edge_ids:
+                content_lines.append(f'        {sid}(["{label}"]):::edgeview')
+            elif vid in ref_ids:
+                content_lines.append(f'        {sid}["{label}"]:::ref')
+            else:
+                content_lines.append(f'        {sid}["{label}"]')
             added.add(vid)
             color_idx += 1
             added.add(sid)
 
         content_lines.append('    end')
 
-        # Style non-ref nodes with per-view cycling colours for visual variety
+        # Style non-ref, non-edge nodes with per-view cycling colours for visual variety
         for vid in sorted(child_views, key=lambda v: get_label(v)):
-            if vid not in ref_ids:
+            if vid not in ref_ids and vid not in edge_ids:
                 sid = sanitize(vid)
                 color = group_colors[color_idx % len(group_colors)]
                 content_lines.append(
@@ -3198,7 +3378,12 @@ def generate_overview_diagram(views, all_views, direct_relations, model_name,
     _ov_groups = {}
     for rel in direct_relations:
         src, tgt = rel["source"], rel["target"]
-        if src in domain_ids_set and tgt in domain_ids_set and src != tgt and rel.get('kind','direct') in ('direct','edge','reverse'):
+        if (
+            src in domain_ids_set
+            and tgt in domain_ids_set
+            and src != tgt
+            and rel.get('kind', 'direct') in ('direct', 'edge', 'reverse')
+        ):
             _ov_groups.setdefault((src, tgt), []).append(rel)
     for (src, tgt), group_rels in _ov_groups.items():
         if rel_count >= 60:
@@ -3206,7 +3391,10 @@ def generate_overview_diagram(views, all_views, direct_relations, model_name,
         kind = group_rels[0].get('kind', 'direct')
         props = [r.get("display_name") or r.get("property", "") for r in group_rels]
         prefix = '' if kind == 'direct' else f'{kind}: '
-        label = (prefix + ' / '.join(p for p in props if p))[:16]
+        raw_edge = prefix + ' / '.join(p for p in props if p)
+        label = _escape_mermaid_node_text(raw_edge)
+        if len(label) > OVERVIEW_EDGE_LABEL_MAX:
+            label = label[: OVERVIEW_EDGE_LABEL_MAX - 1] + '…'
         s, t = sanitize(src), sanitize(tgt)
         if kind == 'edge':
             content_lines.append(f'    {s} ==>|"{label}"| {t}')
@@ -3218,22 +3406,26 @@ def generate_overview_diagram(views, all_views, direct_relations, model_name,
 
     content_lines.append('')
     content_lines.append(
+        '    classDef edgeview fill:#431407,stroke:#fb923c,stroke-width:2px,color:#ffedd5'
+    )
+    content_lines.append(
         '    classDef ref fill:#4c1d95,stroke:#a78bfa,stroke-width:1px,'
-        'color:#ddd6fe,stroke-dasharray:4 4')
+        'color:#ddd6fe,stroke-dasharray:4 4'
+    )
     
     # Build a local node mapping (sanitized → full view ID) for JS click resolution
     ov_node_mapping = {}
     for vid in domain_views:
         sid = sanitize(vid)
         ov_node_mapping[sid] = vid
-        content_lines.append(f'    click {sid} call openModalFromDiagram("{sid}")')
-    # CDM parent ghost clicks omitted in space-cluster overview
+    # Clicks wired in JS via makeNodesClickable (Mermaid click/call breaks parsing in v11)
 
     return (f'''
         <div class="overview-diagram">
             <h3>Model Structure</h3>
             <p class="diagram-desc">{model_name} - Domain Model Overview</p>
             <pre class="mermaid-source">
+%%{{init: {{'flowchart': {{'nodeSpacing': 50, 'rankSpacing': 70, 'padding': 20}} }} }}%%
 flowchart TB
 {chr(10).join(content_lines)}
             </pre>
@@ -3462,12 +3654,31 @@ def generate_property_table(props, view_id, inheritance_depths, all_views):
     table_header = '<tr><th>View Property</th><th>Container Property</th><th>Type</th><th>Card.</th><th>Description</th></tr>'
     
     if own_props:
-        html_parts.append(f'''
+        by_container = defaultdict(list)
+        container_order = []
+        for prop in own_props:
+            cont = (prop.get('container') or prop.get('true_source') or view_id or '').strip()
+            if cont not in by_container:
+                container_order.append(cont)
+            by_container[cont].append(prop)
+
+        def _container_section_title(cont: str) -> str:
+            if cont.startswith('cdf_cdm:') or cont.startswith('cdf_idm:'):
+                return format_source_title(cont)
+            if cont in all_views:
+                return format_source_title(cont)
+            return cont
+
+        for cont in container_order:
+            cont_props = by_container[cont]
+            icon = get_icon(cont)
+            title = _container_section_title(cont)
+            html_parts.append(f'''
         <div class="prop-section own-section">
-            <div class="section-title">Own Properties ({len(own_props)})</div>
+            <div class="section-title">{icon} Container: {title} ({len(cont_props)})</div>
             <table class="prop-table">
                 {table_header}
-                {''.join(make_prop_row(p) for p in own_props)}
+                {''.join(make_prop_row(p) for p in cont_props)}
             </table>
         </div>''')
     
@@ -3500,7 +3711,8 @@ def generate_property_table(props, view_id, inheritance_depths, all_views):
 
 
 def generate_card(view_id, view_data, icon, cat_class, inheritance_depths, all_views,
-                  view_domains=None, ref_view_ids=None, model_relations=None):
+                  view_domains=None, ref_view_ids=None, model_relations=None,
+                  containers_used_for=None):
     """Generate HTML card for a view with industry domain tags."""
     props = view_data['properties']
     total_count = len(props)
@@ -3575,7 +3787,10 @@ def generate_card(view_id, view_data, icon, cat_class, inheritance_depths, all_v
     # Domain tag removed - standards are used internally for categorization only
     domain_tag = ''
 
-    _role = classify_view_role(view_id, all_views, relations=model_relations, ref_view_ids=ref_view_ids)
+    _role = classify_view_role(
+        view_id, all_views, relations=model_relations, ref_view_ids=ref_view_ids,
+        containers_used_for=containers_used_for,
+    )
     _role_labels = {
         'object': ('Object view', 'view-role-object'),
         'edge': ('Edge type', 'view-role-edge'),
@@ -3731,8 +3946,13 @@ def generate_class_hierarchy(views, all_views, domain_view_ids, explicit_model_c
             children_map[pk].append(vid)
             has_parent.add(vid)
 
-    # True CDM types: start with 'Cognite' but are NOT IDM plain-name duplicates
-    cdm_ids    = {v for v in all_views if v.startswith('Cognite') and v not in idm_plain_dupes}
+    def _is_cdm_node(vid: str) -> bool:
+        return vid.startswith('cdf_cdm:') or (
+            vid.startswith('Cognite') and vid not in idm_plain_dupes
+        )
+
+    # CDM types: Cognite* (bare) or cdf_cdm:* (qualified, as in NEAT YAML exports)
+    cdm_ids    = {v for v in all_views if _is_cdm_node(v)}
     idm_ids    = {v for v in all_views if v.startswith('cdf_idm:')}
     domain_ids = set(domain_view_ids or [])
 
@@ -3773,7 +3993,7 @@ def generate_class_hierarchy(views, all_views, domain_view_ids, explicit_model_c
     def node_kind(n):
         if n.startswith('cdf_idm:'):
             return 'idm'
-        if n.startswith('Cognite') and n not in idm_plain_dupes:
+        if _is_cdm_node(n):
             return 'cdm'
         if n in domain_ids:
             return 'domain'
@@ -3792,6 +4012,12 @@ def generate_class_hierarchy(views, all_views, domain_view_ids, explicit_model_c
             base = n[len('cdf_idm:'):]
             ns = space or 'cdf_idm'
             return f'{ns}:{base}{ver_str}'
+        if n.startswith('cdf_cdm:'):
+            base = n[len('cdf_cdm:'):]
+            if '(version=' in base:
+                base = base[: base.index('(version=')].strip()
+            ns = space or 'cdf_cdm'
+            return f'{ns}:{base}{ver_str}'
         if n.startswith('Cognite') and n not in idm_plain_dupes:
             ns = space or 'cdf_cdm'
             return f'{ns}:{n}{ver_str}'
@@ -3802,7 +4028,9 @@ def generate_class_hierarchy(views, all_views, domain_view_ids, explicit_model_c
     all_nodes = set(all_views.keys()) | set(children_map.keys())
     roots = sorted(
         (n for n in all_nodes if n not in has_parent and is_relevant(n)),
-        key=lambda n: (0 if n.startswith('Cognite') else (1 if n.startswith('cdf_idm:') else 2), n)
+        key=lambda n: (
+            0 if _is_cdm_node(n) else (1 if n.startswith('cdf_idm:') else 2), n
+        )
     )
 
     def render(n, branch=None):
@@ -3828,7 +4056,9 @@ def generate_class_hierarchy(views, all_views, domain_view_ids, explicit_model_c
         rel_ch = sorted(
             {c for c in raw_ch
              if is_relevant(c) or any(is_relevant(g) for g in children_map.get(c, []))},
-            key=lambda c: (0 if c.startswith('Cognite') else (1 if c.startswith('cdf_idm:') else 2), c)
+            key=lambda c: (
+                0 if _is_cdm_node(c) else (1 if c.startswith('cdf_idm:') else 2), c
+            )
         )
 
         info_v    = all_views.get(n, {})
@@ -3868,7 +4098,7 @@ def generate_class_hierarchy(views, all_views, domain_view_ids, explicit_model_c
     root_html = ''.join(render(r, frozenset()) for r in roots)
 
     all_cdm_shown = (used_cdm_idm | explicit_ids)
-    cdm_c = len([n for n in all_cdm_shown if n.startswith('Cognite') and n not in idm_plain_dupes])
+    cdm_c = len([n for n in all_cdm_shown if _is_cdm_node(n)])
     idm_c = len([n for n in all_cdm_shown if n.startswith('cdf_idm:')] +
                 [n for n in domain_ids if n.startswith('cdf_idm:')])
     dom_c = len(domain_ids)
@@ -3898,7 +4128,7 @@ def generate_class_hierarchy(views, all_views, domain_view_ids, explicit_model_c
 def generate_html(model_name, space, description, views, all_views, inheritance_depths,
                   categories, category_labels, icons, direct_relations, view_domains=None,
                   domain_view_ids=None, external_id=None, version=None, ref_view_ids=None,
-                  explicit_model_cdm_idm_ids=None):
+                  explicit_model_cdm_idm_ids=None, containers_used_for=None):
     """Generate complete HTML documentation with industry domain categorization."""
     
     sections = {}
@@ -3910,7 +4140,8 @@ def generate_html(model_name, space, description, views, all_views, inheritance_
                 cat_class = f'cat-{cat.replace("_", "-")}'
                 cards.append(generate_card(view_id, views[view_id], icon, cat_class,
                                            inheritance_depths, all_views, view_domains,
-                                           ref_view_ids=ref_view_ids, model_relations=direct_relations))
+                                           ref_view_ids=ref_view_ids, model_relations=direct_relations,
+                                           containers_used_for=containers_used_for))
         sections[cat] = '\n'.join(cards)
     
     total_props = sum(len(v.get('properties', [])) for v in views.values())
@@ -3926,11 +4157,13 @@ def generate_html(model_name, space, description, views, all_views, inheritance_
     }
     diagram_gen = UMLDiagramGenerator(views, all_views, direct_relations, model_name,
                                       domain_view_ids=_diagram_domain_ids,
-                                      ref_view_ids=ref_view_ids)
+                                      ref_view_ids=ref_view_ids,
+                                      containers_used_for=containers_used_for)
     er_diagrams, node_mapping, node_tooltip_labels = diagram_gen.generate_all()
     overview_diagram, ov_node_mapping = generate_overview_diagram(
         views, all_views, direct_relations, model_name,
-        domain_view_ids=_diagram_domain_ids, ref_view_ids=ref_view_ids)
+        domain_view_ids=_diagram_domain_ids, ref_view_ids=ref_view_ids,
+        edge_type_view_ids=diagram_gen.edge_type_view_ids)
     # Merge overview node mapping so openModalFromDiagram can resolve sanitized IDs
     node_mapping.update(ov_node_mapping)
 
@@ -3951,6 +4184,7 @@ def generate_html(model_name, space, description, views, all_views, inheritance_
     _hier_extra = {}
     _hier_all_relevant = (
         {v for v in all_views if v.startswith('Cognite') and v not in _hier_idm_dupes} |
+        {v for v in all_views if v.startswith('cdf_cdm:')} |
         {v for v in all_views if v.startswith('cdf_idm:')} |
         set(domain_view_ids or []) |
         set(ref_view_ids or [])
@@ -4646,16 +4880,129 @@ def generate_html(model_name, space, description, views, all_views, inheritance_
             text-align: center; 
             background: var(--bg-primary); 
             border-radius: 6px; 
-            padding: 1rem;
-            overflow: auto;
-            min-height: 720px;
-            height: auto;
-            max-height: 1200px;
+            padding: 0.5rem;
+            overflow: hidden;
+            width: 100%;
+            max-width: 100%;
+            min-height: 560px;
+            height: min(82vh, 960px);
+            max-height: 960px;
             position: relative;
             margin-bottom: 0.5rem;
+            box-sizing: border-box;
         }}
+        .er-diagram-box.diagram-compact .mermaid-rendered {{
+            min-height: 380px;
+            height: 52vh;
+            max-height: 620px;
+        }}
+        .er-diagram-box.diagram-xlarge .mermaid-rendered {{
+            min-height: 900px;
+            height: min(95vh, 1400px);
+            max-height: 1400px;
+        }}
+        .cross-space-report {{
+            margin: 1rem 0 1.5rem 0;
+            padding: 1rem 1.25rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+        }}
+        .cross-space-report h4 {{
+            margin: 0 0 0.5rem 0;
+            color: var(--text-primary);
+        }}
+        .cross-space-report > p {{
+            margin: 0 0 1rem 0;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }}
+        .cross-space-stats {{
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            display: grid;
+            gap: 0.6rem;
+        }}
+        .cross-space-stats li {{
+            display: flex;
+            align-items: baseline;
+            gap: 0.65rem;
+            padding: 0.55rem 0.85rem;
+            background: var(--bg-primary);
+            border-radius: 6px;
+            border-left: 3px solid var(--accent-blue, #3b82f6);
+            line-height: 1.45;
+        }}
+        .cross-space-stats .stat-value {{
+            font-weight: 700;
+            font-size: 1.15rem;
+            min-width: 2.25rem;
+            color: var(--accent-gold);
+            flex-shrink: 0;
+        }}
+        .cross-space-stats .stat-label {{
+            color: var(--text-secondary);
+            flex: 1;
+        }}
+        .diagram-local-find {{
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.45rem;
+            margin: 0.35rem 0 0.75rem;
+        }}
+        .diagram-local-find input[type="search"] {{
+            flex: 1;
+            min-width: 160px;
+            padding: 0.35rem 0.6rem;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: 0.85rem;
+        }}
+        .diagram-local-find select {{
+            flex: 1;
+            min-width: 200px;
+            max-width: 100%;
+            padding: 0.35rem 0.5rem;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: 0.85rem;
+        }}
+        .diagram-local-find select {{
+            display: block;
+        }}
+        .diagram-local-find select:disabled {{
+            opacity: 0.65;
+            cursor: not-allowed;
+        }}
+        .diagram-local-find button {{
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            padding: 0.35rem 0.65rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.82rem;
+        }}
+        .diagram-local-find button:hover {{
+            border-color: var(--accent-gold);
+            color: var(--accent-gold);
+        }}
+        .diagram-local-find-msg {{
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            flex: 1 1 100%;
+        }}
+        .diagram-local-find-msg.is-error {{ color: #f87171; }}
         .mermaid-rendered svg {{ 
             display: block;
+            width: 100%;
+            height: 100%;
             margin: 0 auto;
         }}
         /* Brighter, thicker edges so they're readable on dark background */
@@ -4702,7 +5049,7 @@ def generate_html(model_name, space, description, views, all_views, inheritance_
             border-radius: 12px;
             padding: 1.5rem;
             margin-bottom: 1.5rem;
-            overflow: auto;
+            overflow: visible;
         }}
         /* Collapsible diagram cards */
         .er-diagram-box h3 {{ cursor: pointer; user-select: none; }}
@@ -4725,6 +5072,82 @@ def generate_html(model_name, space, description, views, all_views, inheritance_
             font-size: 0.82rem;
         }}
         .er-toggle-btn:hover {{ border-color: var(--accent-gold); color: var(--accent-gold); }}
+        .er-render-status {{
+            flex: 1 1 100%;
+            margin: 0;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }}
+        .er-render-status.is-loading {{ color: var(--accent-gold); }}
+        .er-diagram-find {{
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.5rem;
+            flex: 1;
+            min-width: 280px;
+        }}
+        .er-diagram-find label {{
+            font-size: 0.82rem;
+            color: var(--text-secondary);
+            white-space: nowrap;
+        }}
+        .er-diagram-find input[type="text"] {{
+            flex: 1;
+            min-width: 160px;
+            padding: 0.35rem 0.6rem;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: 0.85rem;
+        }}
+        .er-diagram-find select {{
+            min-width: 200px;
+            max-width: 360px;
+            padding: 0.35rem 0.5rem;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: 0.82rem;
+        }}
+        .er-diagram-find button {{
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            padding: 0.35rem 0.75rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.82rem;
+        }}
+        .er-diagram-find button:hover {{
+            border-color: var(--accent-gold);
+            color: var(--accent-gold);
+        }}
+        .diagram-node-highlight rect,
+        .diagram-node-highlight polygon,
+        .diagram-node-highlight circle {{
+            stroke: #fde047 !important;
+            stroke-width: 5px !important;
+            fill: #2563eb !important;
+            filter: drop-shadow(0 0 14px rgba(253, 224, 71, 1));
+        }}
+        .diagram-node-highlight .label,
+        .diagram-node-highlight text,
+        .diagram-node-highlight tspan,
+        .diagram-node-highlight foreignObject div {{
+            color: #ffffff !important;
+            fill: #ffffff !important;
+            font-weight: 700 !important;
+            opacity: 1 !important;
+        }}
+        .diagram-node-dimmed {{
+            opacity: 0.55;
+        }}
+        .diagram-node-dimmed .diagram-node-highlight {{
+            opacity: 1;
+        }}
         
         /* Clickable diagram nodes */
         .clickable-node {{
@@ -5032,6 +5455,14 @@ def generate_html(model_name, space, description, views, all_views, inheritance_
             <p class="section-description">Multi-level UML class diagrams for information modeling</p>
             <div class="er-section-controls">
                 <button class="er-toggle-btn" id="er-toggle-btn" onclick="toggleAllERCards()">&#9660; Expand All</button>
+                <p id="er-render-status" class="er-render-status" aria-live="polite"></p>
+                <div class="er-diagram-find" id="er-diagram-find" style="display:none;">
+                    <label for="er-find-input">Find across all diagrams</label>
+                    <input type="text" id="er-find-input" placeholder="View name, e.g. Pumping, Tank…" autocomplete="off">
+                    <select id="er-find-select" title="Matching views" size="1"></select>
+                    <button type="button" id="er-find-go" title="Go to selection">Go</button>
+                    <button type="button" id="er-find-clear" title="Clear highlight">Clear</button>
+                </div>
             </div>
             {er_diagrams}
         </div>
@@ -5090,11 +5521,11 @@ def generate_html(model_name, space, description, views, all_views, inheritance_
                 classText: '#f8fafc'
             }},
             flowchart: {{
-                nodeSpacing: 40,
-                rankSpacing: 60,
+                nodeSpacing: 70,
+                rankSpacing: 110,
                 curve: 'basis',
-                htmlLabels: true,
-                useMaxWidth: true,
+                htmlLabels: false,
+                useMaxWidth: false,
                 padding: 4
             }}
         }});
@@ -5356,39 +5787,513 @@ def generate_html(model_name, space, description, views, all_views, inheritance_
             wireHovers(nemB, egrB);
         }}
 
-        // ── Helper: init svgPanZoom, never zooming small content beyond 100% ─
+        // ── Pan/zoom: tighten viewBox to content, then fit visible container ─
+        function tightenSvgViewBox(svgEl) {{
+            try {{
+                var bbox = svgEl.getBBox();
+                if (!bbox || bbox.width < 1 || bbox.height < 1) return;
+                var pad = 48;
+                var w = bbox.width;
+                var h = bbox.height;
+                var aspect = w / Math.max(h, 1);
+                if (aspect > 2.2) {{
+                    var minH = w / 1.35;
+                    var extra = (minH - h) / 2;
+                    bbox = {{
+                        x: bbox.x,
+                        y: bbox.y - extra,
+                        width: w,
+                        height: minH
+                    }};
+                    pad = 64;
+                }}
+                svgEl.setAttribute('viewBox',
+                    (bbox.x - pad) + ' ' + (bbox.y - pad) + ' ' +
+                    (bbox.width + 2 * pad) + ' ' + (bbox.height + 2 * pad));
+                svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+            }} catch (e) {{}}
+        }}
+
         function initPanZoom(svgEl, container, opts) {{
-            var cw = container.clientWidth  || 800;
-            var ch = container.clientHeight || 650;
+            if (container._panZoomInstance) {{
+                try {{ container._panZoomInstance.destroy(); }} catch (e) {{}}
+                container._panZoomInstance = null;
+            }}
+            var isCompact = container.closest('.diagram-compact');
+            var isXlarge = container.closest('.diagram-xlarge');
+            if (!isCompact && !isXlarge) {{
+                tightenSvgViewBox(svgEl);
+            }}
             svgEl.removeAttribute('width');
             svgEl.removeAttribute('height');
-            svgEl.style.removeProperty('max-width');
-            svgEl.setAttribute('width',  cw);
-            svgEl.setAttribute('height', ch);
-            svgEl.style.width  = cw + 'px';
-            svgEl.style.height = ch + 'px';
-
-            // Read the SVG viewBox to know the natural content size
-            var vbStr = svgEl.getAttribute('viewBox') || '';
-            var vbP   = vbStr.trim().split(/[\s,]+/);
-            var vbW   = parseFloat(vbP[2]) || cw;
-            var vbH   = parseFloat(vbP[3]) || ch;
+            svgEl.style.width = '100%';
+            svgEl.style.height = '100%';
 
             var pz = svgPanZoom(svgEl, Object.assign({{
-                zoomEnabled: true, controlIconsEnabled: true,
-                fit: true, center: true, minZoom: 0.02, maxZoom: 30
+                zoomEnabled: true,
+                controlIconsEnabled: true,
+                fit: true,
+                center: true,
+                minZoom: 0.05,
+                maxZoom: 25,
+                panEnabled: true
             }}, opts || {{}}));
-
-            // svgPanZoom normalises the fitted state to zoom=1.0 internally.
-            // fitRatio = how much the viewBox content was scaled to fill the container.
-            // If fitRatio > 1 the content is SMALLER than the container — it was zoomed in.
-            // Un-zoom it back: in svgPanZoom's scale, natural-size = 1/fitRatio.
-            var fitRatio = Math.min(cw / vbW, ch / vbH);
-            if (fitRatio > 1) {{
-                pz.zoom(1.0 / fitRatio);
+            container._panZoomInstance = pz;
+            try {{
+                pz.resize();
+                pz.fit();
                 pz.center();
-            }}
+            }} catch (e) {{}}
             return pz;
+        }}
+
+        function ensureDiagramPanZoom(div) {{
+            if (!div || typeof svgPanZoom === 'undefined') return;
+            var svgEl = div.querySelector('svg');
+            if (!svgEl) return;
+            var box = div.closest('.er-diagram-box, .overview-diagram');
+            if (box && box.classList.contains('collapsed')) {{
+                div._needsPanZoom = true;
+                return;
+            }}
+            requestAnimationFrame(function() {{
+                requestAnimationFrame(function() {{
+                    if (!div.isConnected) return;
+                    initPanZoom(svgEl, div);
+                    div._needsPanZoom = false;
+                }});
+            }});
+        }}
+
+        function wireAllLocalDiagramSearch() {{
+            document.querySelectorAll('#erdiagram .er-diagram-box').forEach(function(box) {{
+                wireLocalDiagramSearch(box);
+            }});
+        }}
+
+        function wireLocalDiagramSearch(box) {{
+            if (!box) return;
+            var bar = box.querySelector('.diagram-local-find');
+            if (!bar || bar._localFindWired) return;
+            var rendered = box.querySelector('.mermaid-rendered');
+            if (!rendered) return;
+            bar._localFindWired = true;
+            var input = bar.querySelector('.diagram-local-find-input');
+            var select = bar.querySelector('.diagram-local-find-select');
+            var goBtn = bar.querySelector('.diagram-local-find-go');
+            var clearBtn = bar.querySelector('.diagram-local-find-clear');
+            var msg = bar.querySelector('.diagram-local-find-msg');
+
+            function refreshLocalFindList() {{
+                var svg = rendered.querySelector('svg');
+                var q = input.value;
+                select.innerHTML = '';
+                select._matches = [];
+                if (!q.trim()) {{
+                    select.disabled = true;
+                    select.appendChild(document.createElement('option')).textContent = '— matches —';
+                    return;
+                }}
+                var matches = findAllDiagramNodesInSvg(svg, q);
+                select._matches = matches;
+                if (!matches.length) {{
+                    select.disabled = true;
+                    var o0 = document.createElement('option');
+                    o0.textContent = 'No matches';
+                    select.appendChild(o0);
+                    return;
+                }}
+                select.disabled = false;
+                matches.slice(0, 80).forEach(function(item, idx) {{
+                    var opt = document.createElement('option');
+                    opt.value = String(idx);
+                    opt.textContent = item.label;
+                    select.appendChild(opt);
+                }});
+                if (matches.length === 1) select.selectedIndex = 0;
+            }}
+
+            function runLocalFind() {{
+                var matches = select._matches || [];
+                if (!matches.length) {{
+                    var svg = rendered.querySelector('svg');
+                    matches = findAllDiagramNodesInSvg(svg, input.value);
+                    select._matches = matches;
+                    refreshLocalFindList();
+                }}
+                var idx = select.selectedIndex >= 0 ? select.selectedIndex : 0;
+                var item = matches[idx];
+                if (!item) {{
+                    msg.textContent = (input.value || '').trim() ? 'No match in this diagram.' : '';
+                    msg.classList.add('is-error');
+                    clearDiagramHighlights();
+                    return;
+                }}
+                applyDiagramNodeFocus(item.group, rendered, box, msg);
+            }}
+
+            input.addEventListener('input', refreshLocalFindList);
+            goBtn.addEventListener('click', runLocalFind);
+            input.addEventListener('keydown', function(e) {{
+                if (e.key === 'Enter') {{ e.preventDefault(); runLocalFind(); }}
+            }});
+            select.addEventListener('change', function() {{
+                if (select._matches && select._matches[select.selectedIndex]) {{
+                    applyDiagramNodeFocus(
+                        select._matches[select.selectedIndex].group, rendered, box, msg);
+                }}
+            }});
+            clearBtn.addEventListener('click', function() {{
+                input.value = '';
+                select.innerHTML = '';
+                select._matches = [];
+                select.disabled = true;
+                select.appendChild(document.createElement('option')).textContent = '— matches —';
+                msg.textContent = '';
+                msg.classList.remove('is-error');
+                clearDiagramHighlights();
+            }});
+        }}
+
+        function setupDiagramInteraction(div, options) {{
+            options = options || {{}};
+            makeNodesClickable(div);
+            addEdgeHighlighting(div);
+            addExpandButton(div);
+            var box = div.closest('.er-diagram-box');
+            if (box) wireLocalDiagramSearch(box);
+            if (!options.deferPanZoom) {{
+                ensureDiagramPanZoom(div);
+            }}
+        }}
+
+        function setErRenderStatus(msg, loading) {{
+            var el = document.getElementById('er-render-status');
+            if (!el) return;
+            el.textContent = msg || '';
+            el.classList.toggle('is-loading', !!loading);
+        }}
+
+        function collapseLevel2ErCards() {{
+            document.querySelectorAll('#erdiagram .er-diagram-box').forEach(function(b) {{
+                var h3 = b.querySelector('h3');
+                var title = h3 ? h3.textContent.replace(/\\u26F6.*/g, '').trim() : '';
+                if (/^Level 2:/i.test(title)) {{
+                    b.classList.add('collapsed');
+                }} else {{
+                    b.classList.remove('collapsed');
+                }}
+            }});
+        }}
+
+        function initPanZoomForOpenErCards() {{
+            document.querySelectorAll('#erdiagram .er-diagram-box:not(.collapsed) .mermaid-rendered').forEach(function(div) {{
+                ensureDiagramPanZoom(div);
+            }});
+        }}
+
+        var _diagramSearchIndex = [];
+        var _diagramHighlightGroup = null;
+
+        function normalizeDiagramQuery(q) {{
+            return (q || '').trim().toLowerCase();
+        }}
+
+        function diagramNodeSearchText(g) {{
+            if (g._diagramViewId) return g._diagramViewId;
+            var nid = g.id || '';
+            var m = nid.match(/flowchart-(.+)-\\d+$/);
+            if (m) return m[1].replace(/_/g, '.');
+            var text = '';
+            g.querySelectorAll('text, tspan, foreignObject div, .nodeLabel').forEach(function(t) {{
+                text += ' ' + (t.textContent || '');
+            }});
+            return text.trim();
+        }}
+
+        function resolveViewIdFromNodeId(nodeId) {{
+            if (!nodeId) return null;
+            if (nodeMapping[nodeId]) return nodeMapping[nodeId];
+            var flowMatch = nodeId.match(/flowchart-(.+)-\\d+$/);
+            if (flowMatch) {{
+                var stem = flowMatch[1];
+                if (nodeMapping[stem]) return nodeMapping[stem];
+                for (var key in nodeMapping) {{
+                    if (key.length >= 3 && stem.indexOf(key) >= 0) return nodeMapping[key];
+                }}
+            }}
+            for (var key in nodeMapping) {{
+                if (key.length >= 3 && nodeId.indexOf(key) >= 0) return nodeMapping[key];
+            }}
+            return null;
+        }}
+
+        function tagDiagramNode(g, viewId) {{
+            if (viewId) g._diagramViewId = viewId;
+        }}
+
+        function nodeMatchesDiagramQuery(g, query) {{
+            query = normalizeDiagramQuery(query);
+            if (!query) return false;
+            var vid = g._diagramViewId || resolveViewIdFromNodeId(g.id || '');
+            var label = diagramNodeSearchText(g);
+            if (vid && vid.toLowerCase().indexOf(query) >= 0) return true;
+            if (label && label.toLowerCase().indexOf(query) >= 0) return true;
+            for (var key in nodeMapping) {{
+                if (key.toLowerCase().indexOf(query) < 0) continue;
+                if (nodeMapping[key] === vid) return true;
+                if ((g.id || '').indexOf(key) >= 0) return true;
+            }}
+            return false;
+        }}
+
+        function findAllDiagramNodesInSvg(svg, query) {{
+            if (!svg) return [];
+            query = normalizeDiagramQuery(query);
+            if (!query) return [];
+            var matches = [];
+            var seen = new Set();
+            svg.querySelectorAll('g.node').forEach(function(g) {{
+                if (!nodeMatchesDiagramQuery(g, query)) return;
+                var vid = g._diagramViewId || resolveViewIdFromNodeId(g.id || '') || '';
+                var label = diagramNodeSearchText(g);
+                if (!label && vid) {{
+                    var sp = vid.split(':')[0] || '';
+                    var bare = (vid.split(':')[1] || '').replace(/\\(version=[^)]+\\)/i, '');
+                    label = sp && bare ? (sp + '.' + bare) : vid;
+                }}
+                var key = vid || label || (g.id || '');
+                if (seen.has(key)) return;
+                seen.add(key);
+                var bareName = (vid.split(':')[1] || '').replace(/\\(version=[^)]+\\)/i, '').toLowerCase();
+                var labelL = (label || '').toLowerCase();
+                var score = (bareName === query || labelL === query) ? 0 : 1;
+                matches.push({{ group: g, label: label || key, viewId: vid, score: score }});
+            }});
+            matches.sort(function(a, b) {{
+                if (a.score !== b.score) return a.score - b.score;
+                return String(a.label).localeCompare(String(b.label));
+            }});
+            return matches;
+        }}
+
+        function findDiagramNodeInSvg(svg, query) {{
+            var all = findAllDiagramNodesInSvg(svg, query);
+            return all.length ? all[0].group : null;
+        }}
+
+        function applyDiagramNodeFocus(group, rendered, box, msgEl) {{
+            if (!group || !rendered) return false;
+            if (msgEl) {{
+                msgEl.classList.remove('is-error');
+                msgEl.textContent = 'Found — use +/− to adjust zoom if needed.';
+            }}
+            if (box) {{
+                box.classList.remove('collapsed');
+                updateERToggleBtn();
+            }}
+            clearDiagramHighlights();
+            var svg = rendered.querySelector('svg');
+            if (!svg) return false;
+            svg.querySelectorAll('g.node').forEach(function(g) {{
+                if (g !== group) g.classList.add('diagram-node-dimmed');
+            }});
+            group.classList.add('diagram-node-highlight');
+            group.classList.remove('diagram-node-dimmed');
+            focusDiagramNodeWhenReady(group, rendered);
+            return true;
+        }}
+
+        function buildDiagramSearchIndex() {{
+            _diagramSearchIndex = [];
+            document.querySelectorAll('#erdiagram .er-diagram-box').forEach(function(box) {{
+                var title = (box.querySelector('h3') || {{}}).textContent || '';
+                title = title.replace(/\\u26F6.*/g, '').trim();
+                var rendered = box.querySelector('.mermaid-rendered');
+                if (!rendered) return;
+                var svg = rendered.querySelector('svg');
+                if (!svg) return;
+                svg.querySelectorAll('g.node').forEach(function(g) {{
+                    var vid = g._diagramViewId || resolveViewIdFromNodeId(g.id || '') || '';
+                    var label = diagramNodeSearchText(g);
+                    if (!vid && !label) return;
+                    if (!label && vid) {{
+                        var sp = vid.split(':')[0] || '';
+                        var bare = (vid.split(':')[1] || '').replace(/\\(version=[^)]+\\)/i, '');
+                        label = sp && bare ? (sp + '.' + bare) : vid;
+                    }}
+                    _diagramSearchIndex.push({{
+                        label: label,
+                        viewId: vid,
+                        box: box,
+                        group: g,
+                        diagramTitle: title
+                    }});
+                }});
+            }});
+            var findBar = document.getElementById('er-diagram-find');
+            if (findBar) findBar.style.display = _diagramSearchIndex.length ? 'flex' : 'none';
+        }}
+
+        function clearDiagramHighlights() {{
+            document.querySelectorAll('.diagram-node-highlight').forEach(function(g) {{
+                g.classList.remove('diagram-node-highlight');
+            }});
+            document.querySelectorAll('.diagram-node-dimmed').forEach(function(g) {{
+                g.classList.remove('diagram-node-dimmed');
+            }});
+            _diagramHighlightGroup = null;
+        }}
+
+        function diagramNodeShape(group) {{
+            if (!group) return null;
+            return group.querySelector('rect, polygon, circle, path') || group;
+        }}
+
+        function focusDiagramNode(group, container) {{
+            if (!group || !container) return;
+            var pz = container._panZoomInstance;
+            if (!pz) return;
+            var shape = diagramNodeShape(group);
+            if (!shape) return;
+            var svg = container.querySelector('svg');
+            if (!svg) return;
+
+            var box = container.closest('.er-diagram-box') || container;
+            var msgEl = box.querySelector('.diagram-local-find-msg');
+
+            function centerNodeInViewport() {{
+                var svgRect = svg.getBoundingClientRect();
+                var gr = shape.getBoundingClientRect();
+                if (!gr.width && !gr.height) return false;
+                var pan = pz.getPan();
+                var nodeCx = gr.left + gr.width / 2 - svgRect.left;
+                var nodeCy = gr.top + gr.height / 2 - svgRect.top;
+                pz.pan({{
+                    x: pan.x + (svgRect.width / 2 - nodeCx),
+                    y: pan.y + (svgRect.height / 2 - nodeCy)
+                }});
+                return true;
+            }}
+
+            try {{
+                pz.resize();
+                var statusPx = 13;
+                if (msgEl) {{
+                    statusPx = parseFloat(window.getComputedStyle(msgEl).fontSize) || statusPx;
+                }}
+                var targetNodePx = Math.max(statusPx * 6, 56);
+
+                var curZoom = pz.getZoom();
+                if (!curZoom || curZoom < 0.02) {{
+                    pz.fit();
+                    pz.center();
+                    curZoom = pz.getZoom();
+                }}
+
+                var gr0 = shape.getBoundingClientRect();
+                if (gr0.height > 2) {{
+                    var zoom = curZoom * (targetNodePx / gr0.height);
+                    var maxW = svg.getBoundingClientRect().width * 0.5;
+                    if (gr0.width * zoom > maxW && gr0.width > 2) {{
+                        zoom = Math.min(zoom, maxW / gr0.width);
+                    }}
+                    zoom = Math.min(Math.max(zoom, 0.5), 16);
+                    pz.zoom(zoom);
+                }}
+
+                centerNodeInViewport();
+                requestAnimationFrame(function() {{
+                    centerNodeInViewport();
+                    requestAnimationFrame(centerNodeInViewport);
+                }});
+            }} catch (e) {{
+                console.warn('focusDiagramNode', e);
+                try {{ pz.fit(); pz.center(); }} catch (e2) {{}}
+            }}
+        }}
+
+        function focusDiagramNodeWhenReady(group, container, attempt) {{
+            attempt = attempt || 0;
+            if (container._panZoomInstance) {{
+                focusDiagramNode(group, container);
+                return;
+            }}
+            if (attempt > 30) return;
+            ensureDiagramPanZoom(container);
+            setTimeout(function() {{ focusDiagramNodeWhenReady(group, container, attempt + 1); }}, 40);
+        }}
+
+        function goToDiagramMatch(entry) {{
+            if (!entry) return;
+            clearDiagramHighlights();
+            entry.box.classList.remove('collapsed');
+            updateERToggleBtn();
+            var rendered = entry.box.querySelector('.mermaid-rendered');
+            if (!rendered) return;
+            entry.box.scrollIntoView({{ behavior: 'smooth', block: 'center' }});
+            var svg = rendered.querySelector('svg');
+            if (!svg) return;
+            svg.querySelectorAll('g.node').forEach(function(g) {{
+                if (g !== entry.group) g.classList.add('diagram-node-dimmed');
+            }});
+            entry.group.classList.add('diagram-node-highlight');
+            entry.group.classList.remove('diagram-node-dimmed');
+            _diagramHighlightGroup = entry.group;
+            focusDiagramNodeWhenReady(entry.group, rendered);
+        }}
+
+        function refreshDiagramFindList() {{
+            var input = document.getElementById('er-find-input');
+            var select = document.getElementById('er-find-select');
+            if (!input || !select) return;
+            var q = (input.value || '').trim().toLowerCase();
+            select.innerHTML = '';
+            if (!q) return;
+            var matches = _diagramSearchIndex.filter(function(item) {{
+                return nodeMatchesDiagramQuery(item.group, q)
+                    || item.diagramTitle.toLowerCase().indexOf(q) >= 0;
+            }});
+            matches.slice(0, 80).forEach(function(item, idx) {{
+                var opt = document.createElement('option');
+                opt.value = String(idx);
+                opt.textContent = item.label + ' — ' + item.diagramTitle;
+                opt._entry = item;
+                select.appendChild(opt);
+            }});
+            select._matches = matches;
+            if (matches.length === 1) select.selectedIndex = 0;
+        }}
+
+        function wireDiagramFindControls() {{
+            var input = document.getElementById('er-find-input');
+            var select = document.getElementById('er-find-select');
+            var goBtn = document.getElementById('er-find-go');
+            var clearBtn = document.getElementById('er-find-clear');
+            if (!input || !select) return;
+            input.addEventListener('input', refreshDiagramFindList);
+            input.addEventListener('keydown', function(e) {{
+                if (e.key === 'Enter') {{
+                    e.preventDefault();
+                    var matches = select._matches || [];
+                    var idx = select.selectedIndex >= 0 ? select.selectedIndex : 0;
+                    if (matches[idx]) goToDiagramMatch(matches[idx]);
+                }}
+            }});
+            if (goBtn) goBtn.addEventListener('click', function() {{
+                var matches = select._matches || [];
+                var idx = select.selectedIndex >= 0 ? select.selectedIndex : 0;
+                if (matches[idx]) goToDiagramMatch(matches[idx]);
+            }});
+            if (clearBtn) clearBtn.addEventListener('click', function() {{
+                input.value = '';
+                select.innerHTML = '';
+                clearDiagramHighlights();
+            }});
+            select.addEventListener('change', function() {{
+                var matches = select._matches || [];
+                if (matches[select.selectedIndex]) goToDiagramMatch(matches[select.selectedIndex]);
+            }});
         }}
 
         // Make diagram nodes clickable
@@ -5400,26 +6305,9 @@ def generate_html(model_name, space, description, views, all_views, inheritance_
             const allGroups = svg.querySelectorAll('g[id], g.node, g.default');
             
             function findViewId(nodeId, allText) {{
-                // 1. Direct node ID match against mapping keys
-                if (nodeMapping[nodeId]) return nodeMapping[nodeId];
-                
-                // 2. Extract name from flowchart ID pattern (flowchart-Name-N)
-                var flowMatch = nodeId.match(/flowchart-([^-]+)/);
-                if (flowMatch && nodeMapping[flowMatch[1]]) return nodeMapping[flowMatch[1]];
-                
-                // 3. Extract name from class diagram ID pattern (classId-Name-N)
-                var classMatch = nodeId.match(/classId-([^-]+)/);
-                if (classMatch && nodeMapping[classMatch[1]]) return nodeMapping[classMatch[1]];
-                
-                // 4. Check if node ID contains any mapping key
-                for (var key in nodeMapping) {{
-                    if (key.length >= 3 && nodeId.includes(key)) return nodeMapping[key];
-                }}
-                
-                // 5. Exact text match against mapping keys (catches display names)
+                var vid = resolveViewIdFromNodeId(nodeId);
+                if (vid) return vid;
                 if (allText && nodeMapping[allText]) return nodeMapping[allText];
-                
-                // 6. Text content starts with or equals a mapping key
                 if (allText) {{
                     for (var key in nodeMapping) {{
                         if (key.length >= 3 && (allText === key || allText.startsWith(key))) {{
@@ -5427,11 +6315,11 @@ def generate_html(model_name, space, description, views, all_views, inheritance_
                         }}
                     }}
                 }}
-                
                 return null;
             }}
             
             function makeClickable(el, viewId) {{
+                tagDiagramNode(el, viewId);
                 if (el.classList.contains('clickable-node')) return;
                 var card = document.querySelector('.card[data-view-id="' + viewId + '"]') ||
                            document.querySelector('.card[data-node-id="' + viewId + '"]');
@@ -5445,17 +6333,14 @@ def generate_html(model_name, space, description, views, all_views, inheritance_
                 }});
             }}
             
-            allGroups.forEach(function(node) {{
-                if (node.classList.contains('clickable-node')) return;
-                
+            svg.querySelectorAll('g.node').forEach(function(node) {{
                 var nodeId = node.id || '';
-                var textEls = node.querySelectorAll('text, tspan');
-                var allText = '';
-                textEls.forEach(function(t) {{ allText += ' ' + t.textContent; }});
-                allText = allText.trim();
-                
+                var allText = diagramNodeSearchText(node);
                 var viewId = findViewId(nodeId, allText);
-                if (viewId) makeClickable(node, viewId);
+                if (viewId) {{
+                    tagDiagramNode(node, viewId);
+                    makeClickable(node, viewId);
+                }}
             }});
             
             // Fallback: find text elements and make their parent nodes clickable
@@ -5656,13 +6541,7 @@ def generate_html(model_name, space, description, views, all_views, inheritance_
                     div.innerHTML = svg;
                     div.className = 'mermaid-rendered';
                     el.parentNode.replaceChild(div, el);
-                    makeNodesClickable(div);
-                    addEdgeHighlighting(div);
-                    if (typeof svgPanZoom !== 'undefined') {{
-                        var svgEl = div.querySelector('svg');
-                        if (svgEl) initPanZoom(svgEl, div);
-                    }}
-                    addExpandButton(div);
+                    setupDiagramInteraction(div);
                 }} catch (e) {{
                     console.error('Diagram error:', e);
                 }}
@@ -5670,46 +6549,73 @@ def generate_html(model_name, space, description, views, all_views, inheritance_
         }});
         
         var erRendered = false;
+        var erRendering = false;
+
+        async function renderErDiagrams() {{
+            if (erRendered || erRendering) return;
+            erRendering = true;
+            setErRenderStatus('Rendering ER diagrams…', true);
+            const erDiagrams = document.querySelectorAll('#erdiagram .mermaid-source');
+            for (const el of erDiagrams) {{
+                const id = 'e-' + Math.random().toString(36).substr(2, 9);
+                try {{
+                    const {{ svg }} = await mermaid.render(id, el.textContent);
+                    const div = document.createElement('div');
+                    div.innerHTML = svg;
+                    div.className = 'mermaid-rendered';
+                    el.parentNode.replaceChild(div, el);
+                    // Defer pan/zoom until cards are expanded (batch init breaks with 50+ diagrams)
+                    setupDiagramInteraction(div, {{ deferPanZoom: true }});
+                }} catch (e) {{
+                    console.error('ER error:', e);
+                    var errBox = el.closest('.er-diagram-box');
+                    var errTitle = errBox && errBox.querySelector('h3')
+                        ? errBox.querySelector('h3').textContent.trim() : 'Diagram';
+                    var errDiv = document.createElement('div');
+                    errDiv.className = 'diagram-error';
+                    errDiv.style.cssText = 'color:#ef4444;padding:1rem;white-space:pre-wrap;font-size:0.85rem;';
+                    errDiv.textContent = errTitle + ': ' + (e.message || String(e));
+                    el.parentNode.replaceChild(errDiv, el);
+                }}
+            }}
+            erRendered = true;
+            erRendering = false;
+            wireERCardToggle();
+            collapseLevel2ErCards();
+            updateERToggleBtn();
+            buildDiagramSearchIndex();
+            wireDiagramFindControls();
+            wireAllLocalDiagramSearch();
+            var findBar = document.getElementById('er-diagram-find');
+            if (findBar) findBar.style.display = 'flex';
+            requestAnimationFrame(function() {{
+                initPanZoomForOpenErCards();
+                setErRenderStatus(
+                    'Level 1–5 maps are open below (use each diagram’s search box to find a view). Level 2 entity diagrams are collapsed — Expand All or click ▶.',
+                    false
+                );
+            }});
+        }}
         
-        function showSection(sectionId) {{
+        function showSection(sectionId, evt) {{
+            var e = evt || (typeof event !== 'undefined' ? event : null);
             document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
             document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
             document.getElementById(sectionId).classList.add('active');
-            event.target.classList.add('active');
+            if (e && e.target) {{
+                var tab = e.target.closest ? e.target.closest('.nav-tab') : null;
+                (tab || e.target).classList.add('active');
+            }} else {{
+                document.querySelectorAll('.nav-tab').forEach(function(t) {{
+                    var oc = t.getAttribute('onclick') || '';
+                    if (oc.indexOf("'" + sectionId + "'") >= 0 || oc.indexOf('"' + sectionId + '"') >= 0) {{
+                        t.classList.add('active');
+                    }}
+                }});
+            }}
             
             if (sectionId === 'erdiagram' && !erRendered) {{
-                setTimeout(async function() {{
-                    const erDiagrams = document.querySelectorAll('#erdiagram .mermaid-source');
-                    for (const el of erDiagrams) {{
-                        const id = 'e-' + Math.random().toString(36).substr(2, 9);
-                        try {{
-                            const {{ svg }} = await mermaid.render(id, el.textContent);
-                            const div = document.createElement('div');
-                            div.innerHTML = svg;
-                            div.className = 'mermaid-rendered';
-                            el.parentNode.replaceChild(div, el);
-                            makeNodesClickable(div);
-                            addEdgeHighlighting(div);
-                            if (typeof svgPanZoom !== 'undefined') {{
-                                var svgEl2 = div.querySelector('svg');
-                                if (svgEl2) initPanZoom(svgEl2, div);
-                            }}
-                            addExpandButton(div);
-                        }} catch (e) {{
-                            console.error('ER error:', e);
-                            el.style.display = 'block';
-                            el.style.color = '#ef4444';
-                            el.style.whiteSpace = 'pre-wrap';
-                        }}
-                    }}
-                    erRendered = true;
-                    // Wire click-to-collapse on each card h3, then start all collapsed
-                    wireERCardToggle();
-                    document.querySelectorAll('#erdiagram .er-diagram-box').forEach(function(b) {{
-                        b.classList.add('collapsed');
-                    }});
-                    updateERToggleBtn();
-                }}, 100);
+                setTimeout(function() {{ renderErDiagrams(); }}, 50);
             }}
         }}
         
@@ -5717,6 +6623,10 @@ def generate_html(model_name, space, description, views, all_views, inheritance_
         function toggleERCard(box) {{
             box.classList.toggle('collapsed');
             updateERToggleBtn();
+            if (!box.classList.contains('collapsed')) {{
+                var rendered = box.querySelector('.mermaid-rendered');
+                if (rendered) ensureDiagramPanZoom(rendered);
+            }}
         }}
 
         function updateERToggleBtn() {{
@@ -5738,6 +6648,9 @@ def generate_html(model_name, space, description, views, all_views, inheritance_
                 if (anyOpen) b.classList.add('collapsed');
                 else b.classList.remove('collapsed');
             }});
+            if (!anyOpen) {{
+                requestAnimationFrame(function() {{ initPanZoomForOpenErCards(); }});
+            }}
             updateERToggleBtn();
         }}
 
@@ -6450,7 +7363,7 @@ def _view_space_version(view_id, view_info):
 
 
 def _load_ref_model(yaml_path, all_views, properties_by_view,
-                    direct_relations=None, verbose=False):
+                    direct_relations=None, verbose=False, containers_used_for=None):
     """Merge a reference YAML model into all_views / properties_by_view.
 
     If *direct_relations* is supplied (a list), ref-to-ref relations from the
@@ -6460,7 +7373,11 @@ def _load_ref_model(yaml_path, all_views, properties_by_view,
     metadata, or None on failure.
     """
     try:
-        ref_meta, ref_props, ref_views, ref_relations = parse_yaml_file(str(yaml_path))
+        ref_meta, ref_props, ref_views, ref_relations, ref_containers = parse_yaml_file(
+            str(yaml_path)
+        )
+        if containers_used_for is not None:
+            containers_used_for.update(ref_containers)
         ref_space   = ref_meta.get('space', '')
         ref_version = ref_meta.get('version', '')
         added = 0
@@ -6485,6 +7402,89 @@ def _load_ref_model(yaml_path, all_views, properties_by_view,
         if verbose:
             print(f"  [ref] Failed to load {yaml_path}: {exc}")
         return None
+
+
+
+def _bundled_cdm_path() -> Path:
+    return Path(__file__).parent / "CogniteCore.yaml"
+
+
+def _bundled_idm_path() -> Path:
+    return Path(__file__).parent / "CogniteProcessIndustries.yaml"
+
+
+def _fetch_cdm_yaml_from_env(env_path, tmp_dir, verbose=True):
+    """Export CogniteCore (cdf_cdm) from CDF using credentials in *env_path*."""
+    import contextlib
+    import io
+
+    try:
+        from cognite.neat import NeatSession, get_cognite_client
+    except ImportError:
+        if verbose:
+            print("  CDM: cognite-neat not installed — cannot fetch from CDF")
+        return None
+
+    try:
+        client = get_cognite_client(str(env_path))
+        session = NeatSession(client.config)
+        sink = contextlib.nullcontext() if verbose else contextlib.redirect_stdout(io.StringIO())
+        with sink:
+            session.physical_data_model.read.cdf("cdf_cdm", "CogniteCore", "v1")
+        tmp_cdm = Path(tmp_dir) / "_html_doc_cdm_tmp_.yaml"
+        with contextlib.redirect_stdout(io.StringIO()):
+            session.physical_data_model.write.yaml(str(tmp_cdm))
+        if tmp_cdm.exists() and tmp_cdm.stat().st_size > 0:
+            if verbose:
+                print("  CDM: CogniteCore loaded from CDF (space=cdf_cdm)")
+            return tmp_cdm
+    except Exception as exc:
+        if verbose:
+            print(f"  CDM: CDF fetch failed ({exc})")
+
+    bundled = _bundled_cdm_path()
+    if bundled.exists():
+        if verbose:
+            print(f"  CDM: using bundled {bundled.name}")
+        return bundled
+    return None
+
+
+def _fetch_idm_yaml_from_env(env_path, tmp_dir, verbose=True):
+    """Export CogniteProcessIndustries (cdf_idm) from CDF using credentials in *env_path*."""
+    import contextlib
+    import io
+
+    try:
+        from cognite.neat import NeatSession, get_cognite_client
+    except ImportError:
+        if verbose:
+            print("  IDM: cognite-neat not installed — cannot fetch from CDF")
+        return None
+
+    try:
+        client = get_cognite_client(str(env_path))
+        session = NeatSession(client.config)
+        sink = contextlib.nullcontext() if verbose else contextlib.redirect_stdout(io.StringIO())
+        with sink:
+            session.physical_data_model.read.cdf("cdf_idm", "CogniteProcessIndustries", "v1")
+        tmp_idm = Path(tmp_dir) / "_html_doc_idm_tmp_.yaml"
+        with contextlib.redirect_stdout(io.StringIO()):
+            session.physical_data_model.write.yaml(str(tmp_idm))
+        if tmp_idm.exists() and tmp_idm.stat().st_size > 0:
+            if verbose:
+                print("  IDM: CogniteProcessIndustries loaded from CDF (space=cdf_idm)")
+            return tmp_idm
+    except Exception as exc:
+        if verbose:
+            print(f"  IDM: CDF fetch failed ({exc})")
+
+    bundled = _bundled_idm_path()
+    if bundled.exists():
+        if verbose:
+            print(f"  IDM: using bundled {bundled.name}")
+        return bundled
+    return None
 
 
 def _enrich_governed_views_from_cdf(governed_view_keys, all_views, properties_by_view,
@@ -6649,9 +7649,12 @@ def run_generation(input_path, output_path, cdm_path=None, idm_path=None,
                    the generator attempts auto-discovery from the metadata
                    ``governedSpaces`` field and, if *env_path* is provided,
                    fetches missing spaces directly from CDF.
-        env_path:  Optional path to a .env file with CDF credentials.  Used to
-                   fetch reference models for governed spaces that cannot be
-                   resolved from local YAML files.  Requires cognite-neat.
+        env_path:  Optional path to a .env file with CDF credentials.  When provided
+                   and --cdm/--idm are omitted, Cognite Core (cdf_cdm) and Process
+                   Industries (cdf_idm) models are fetched from the connected project
+                   before falling back to local/bundled YAML.  Also used to fetch
+                   governed-space reference models and enrich their metadata.
+                   Requires cognite-neat.
     """
     input_path  = Path(input_path)
     output_path = Path(output_path)
@@ -6660,9 +7663,7 @@ def run_generation(input_path, output_path, cdm_path=None, idm_path=None,
     if not input_path.exists():
         raise FileNotFoundError(f"Input file not found: {input_path}")
 
-    # ── CDM auto-discovery ───────────────────────────────────────────────────
-    # Walk up from base_dir up to 8 levels so Toolkit directories buried deep
-    # in a project tree can still find CogniteCore.yaml at the project root.
+    # ── CDM / IDM resolution (explicit path → CDF via --env → local discovery) ─
     def _find_upward(filename, start, max_levels=8):
         d = Path(start)
         for _ in range(max_levels):
@@ -6674,18 +7675,39 @@ def run_generation(input_path, output_path, cdm_path=None, idm_path=None,
             d = d.parent
         return None
 
-    if cdm_path is None:
-        cdm_path = (
-            _find_upward('CogniteCore.yaml', base_dir)
-            or _find_upward('CogniteCore.yaml', Path(__file__).parent)
-        )
+    cdm_tmp_path = None
+    idm_tmp_path = None
+    _tmp_fetch_dir = output_path.parent
 
-    # ── IDM auto-discovery ───────────────────────────────────────────────────
+    if cdm_path is None:
+        if env_path:
+            print("\nResolving CDM (CogniteCore / cdf_cdm)...")
+            fetched_cdm = _fetch_cdm_yaml_from_env(env_path, _tmp_fetch_dir, verbose=True)
+            if fetched_cdm:
+                cdm_path = fetched_cdm
+                if fetched_cdm.name == "_html_doc_cdm_tmp_.yaml":
+                    cdm_tmp_path = fetched_cdm
+        if cdm_path is None:
+            cdm_path = (
+                _find_upward("CogniteCore.yaml", base_dir)
+                or _find_upward("CogniteCore.yaml", Path(__file__).parent)
+                or (_bundled_cdm_path() if _bundled_cdm_path().exists() else None)
+            )
+
     if idm_path is None:
-        idm_path = (
-            _find_upward('CogniteProcessIndustries.yaml', base_dir)
-            or _find_upward('CogniteProcessIndustries.yaml', Path(__file__).parent)
-        )
+        if env_path:
+            print("Resolving IDM (CogniteProcessIndustries / cdf_idm)...")
+            fetched_idm = _fetch_idm_yaml_from_env(env_path, _tmp_fetch_dir, verbose=True)
+            if fetched_idm:
+                idm_path = fetched_idm
+                if fetched_idm.name == "_html_doc_idm_tmp_.yaml":
+                    idm_tmp_path = fetched_idm
+        if idm_path is None:
+            idm_path = (
+                _find_upward("CogniteProcessIndustries.yaml", base_dir)
+                or _find_upward("CogniteProcessIndustries.yaml", Path(__file__).parent)
+                or (_bundled_idm_path() if _bundled_idm_path().exists() else None)
+            )
 
     print(f"\n{'='*70}")
     print(f"NEAT Documentation Generator v6 - Domain Model Centric")
@@ -6699,16 +7721,23 @@ def run_generation(input_path, output_path, cdm_path=None, idm_path=None,
         or '.datamodel.' in input_path.name.lower()
     )
     print(f"\nParsing {input_path.name}...")
+    containers_used_for: dict[str, str] = {}
     if suffix in ('.xlsx', '.xls'):
-        metadata, properties_by_view, all_views, direct_relations = parse_excel_file(str(input_path))
+        metadata, properties_by_view, all_views, direct_relations, containers_used_for = (
+            parse_excel_file(str(input_path))
+        )
     elif _is_toolkit:
         print("  (CDF Toolkit directory format detected)")
-        metadata, properties_by_view, all_views, direct_relations = parse_toolkit_dir(
-            input_path, version_override=version_override,
-            config_path=config_path
+        metadata, properties_by_view, all_views, direct_relations, containers_used_for = (
+            parse_toolkit_dir(
+                input_path, version_override=version_override,
+                config_path=config_path,
+            )
         )
     else:
-        metadata, properties_by_view, all_views, direct_relations = parse_yaml_file(str(input_path))
+        metadata, properties_by_view, all_views, direct_relations, containers_used_for = (
+            parse_yaml_file(str(input_path))
+        )
 
     model_name  = metadata.get('name', input_path.stem.replace('_', ' ').title())
     space       = metadata.get('space', input_path.stem)
@@ -6742,7 +7771,8 @@ def run_generation(input_path, output_path, cdm_path=None, idm_path=None,
 
     if cdm_path and Path(cdm_path).exists():
         print(f"\nLoading CDM from {Path(cdm_path).name}...")
-        cdm_meta, cdm_props, cdm_views, _ = parse_yaml_file(str(cdm_path))
+        cdm_meta, cdm_props, cdm_views, _, cdm_containers = parse_yaml_file(str(cdm_path))
+        containers_used_for.update(cdm_containers)
         cdm_version = cdm_meta.get('version', '')
         cdm_space   = cdm_meta.get('space', 'cdf_cdm')
         print(f"  CDM views: {len(cdm_views)}")
@@ -6762,7 +7792,8 @@ def run_generation(input_path, output_path, cdm_path=None, idm_path=None,
 
     if idm_path and Path(idm_path).exists():
         print(f"\nLoading IDM from {Path(idm_path).name}...")
-        idm_meta, idm_props, idm_views, _ = parse_yaml_file(str(idm_path))
+        idm_meta, idm_props, idm_views, _, idm_containers = parse_yaml_file(str(idm_path))
+        containers_used_for.update(idm_containers)
         idm_version = idm_meta.get('version', '')
         idm_space   = idm_meta.get('space', 'cdf_idm')
         idm_added = 0
@@ -6824,7 +7855,7 @@ def run_generation(input_path, output_path, cdm_path=None, idm_path=None,
                     print(f"  [ref] Warning: ref path not found: {rp}")
                     continue
                 try:
-                    _rm, _, _, _ = parse_yaml_file(str(rp))
+                    _rm, _, _, _, _rc = parse_yaml_file(str(rp))
                     _rs = _rm.get('space', '')
                     if _rs:
                         space_to_yaml[_rs] = rp
@@ -6848,7 +7879,8 @@ def run_generation(input_path, output_path, cdm_path=None, idm_path=None,
             print(f"\nLoading {len(space_to_yaml)} reference model(s) from local YAML...")
         for rs, yaml_path in space_to_yaml.items():
             _load_ref_model(yaml_path, all_views, properties_by_view,
-                            direct_relations=direct_relations, verbose=True)
+                            direct_relations=direct_relations, verbose=True,
+                            containers_used_for=containers_used_for)
 
         # ── Tag governed-space views already parsed from the Excel/YAML ──────
         # The input model already lists governed-space views as fully-qualified
@@ -7044,7 +8076,7 @@ def run_generation(input_path, output_path, cdm_path=None, idm_path=None,
     explicit_model_cdm_idm_ids = {
         k for k, v in all_views.items()
         if v.get('_in_model_views')
-        and (k.startswith('Cognite') or k.startswith('cdf_idm:'))
+        and (k.startswith('Cognite') or k.startswith('cdf_cdm:') or k.startswith('cdf_idm:'))
     }
 
     print("\nGenerating UML diagrams...")
@@ -7053,7 +8085,8 @@ def run_generation(input_path, output_path, cdm_path=None, idm_path=None,
                          domain_view_ids=domain_view_ids,
                          external_id=external_id, version=version,
                          ref_view_ids=ref_view_ids,
-                         explicit_model_cdm_idm_ids=explicit_model_cdm_idm_ids)
+                         explicit_model_cdm_idm_ids=explicit_model_cdm_idm_ids,
+                         containers_used_for=containers_used_for)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, 'w', encoding='utf-8') as f:
@@ -7062,6 +8095,14 @@ def run_generation(input_path, output_path, cdm_path=None, idm_path=None,
     print(f"\n{'='*70}")
     print(f"Generated: {output_path}")
     print(f"{'='*70}\n")
+
+    for _tmp in (cdm_tmp_path, idm_tmp_path):
+        if _tmp and _tmp.exists():
+            try:
+                _tmp.unlink()
+            except OSError:
+                pass
+
     return output_path
 
 
@@ -7097,9 +8138,10 @@ def main():
     )
     parser.add_argument(
         '--env', metavar='ENV_FILE',
-        help='Path to a .env file with CDF credentials. When provided, governed '
-             'spaces not resolved from local YAML files are fetched directly from '
-             'the connected CDF project. Requires cognite-neat to be installed.',
+        help='Path to a .env file with CDF credentials. When provided without --cdm, '
+             'loads CogniteCore from cdf_cdm in the project; without --idm, loads '
+             'CogniteProcessIndustries from cdf_idm. Also fetches governed spaces '
+             'not resolved from local YAML. Requires cognite-neat.',
     )
     parser.add_argument('-o', '--output', help='Output HTML file path (defaults to <input>.html)')
     parser.add_argument(
